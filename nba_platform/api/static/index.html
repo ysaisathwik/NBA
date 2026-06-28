@@ -3,130 +3,192 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Intelligent NBA Platform</title>
+<title>Northwind Power — Next Best Action</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e;
-          --blue:#388bfd; --green:#3fb950; --amber:#d29922; --red:#f85149; --purple:#a371f7; --teal:#2dd4bf; }
+  :root {
+    --bg:#efe6d4; --bg2:#e7dcc6; --panel:#fbf6ec; --panel2:#f5edda; --line:#e2d6bf;
+    --text:#332f28; --text2:#5c554a; --muted:#9a8f7a;
+    --blue:#1f7a6d; --green:#3f8f5b; --amber:#bf8a2c; --red:#b8472f; --purple:#7d5ba6; --teal:#2a9d8f;
+    --gold:#c2932f; --shadow:0 6px 22px rgba(74,60,33,.10); --shadow-sm:0 2px 8px rgba(74,60,33,.08);
+    --serif:'Fraunces',Georgia,'Times New Roman',serif;
+    --sans:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); }
+  body { margin:0; font:15px/1.55 var(--sans); color:var(--text);
+         background:radial-gradient(1200px 600px at 80% -10%, #f6eede 0%, var(--bg) 45%) fixed; }
+  ::selection { background:rgba(31,122,109,.18); }
   a { color:var(--blue); }
-  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:#21262d; color:var(--text); border-radius:6px; padding:8px 12px; }
-  button:hover { border-color:var(--blue); }
-  button.primary { background:var(--blue); border-color:var(--blue); font-weight:600; }
-  button.green { background:var(--green); border-color:var(--green); color:#04130a; font-weight:600; }
+  h1,h2,h3 { font-family:var(--serif); letter-spacing:-.01em; }
+  code, .mono { font-family:var(--mono); }
+
+  button { font:600 14px var(--sans); cursor:pointer; border:1px solid var(--line); background:var(--panel2);
+           color:var(--text); border-radius:9px; padding:9px 14px; transition:transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease; }
+  button:hover { border-color:var(--blue); box-shadow:var(--shadow-sm); transform:translateY(-1px); }
+  button:active { transform:translateY(1px); box-shadow:none; }
+  button.primary { background:linear-gradient(180deg,#2a8a7c,#1f7a6d); border-color:#1b6c60; color:#fff; }
+  button.green { background:linear-gradient(180deg,#4a9d66,#3f8f5b); border-color:#357a4d; color:#fff; }
   button.red { background:transparent; border-color:var(--red); color:var(--red); }
-  input, textarea { width:100%; background:#0d1117; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:9px; font:inherit; }
-  label { font-size:11px; color:var(--muted); display:block; margin:8px 0 3px; }
+  button.red:hover { background:rgba(184,71,47,.08); }
+  input, textarea { width:100%; background:#fffdf7; color:var(--text); border:1px solid var(--line);
+           border-radius:9px; padding:11px 12px; font:inherit; transition:border-color .15s, box-shadow .15s; }
+  input:focus, textarea:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(31,122,109,.14); }
+  label { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:block; margin:12px 0 5px; font-weight:600; }
+
+  @keyframes fadeUp { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;} }
+  @keyframes floatIn { from{opacity:0; transform:scale(.98);} to{opacity:1; transform:none;} }
 
   /* login */
-  #login { max-width:420px; margin:8vh auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:28px; }
-  #login h1 { font-size:20px; margin:0 0 4px; } #login h1 span { color:var(--blue); }
-  #login p.sub { color:var(--muted); margin:0 0 20px; font-size:13px; }
-  .demo { margin-top:18px; font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:12px; }
-  .demo code { color:var(--text); cursor:pointer; } .demo div { padding:2px 0; }
-  #login-error { color:var(--red); font-size:13px; min-height:18px; margin-top:8px; }
+  #login { max-width:440px; margin:7vh auto; background:var(--panel); border:1px solid var(--line);
+           border-radius:18px; padding:0; overflow:hidden; box-shadow:var(--shadow); animation:floatIn .45s ease both; }
+  .login-top { padding:26px 30px 22px; background:linear-gradient(160deg,#1f7a6d 0%,#2a9d8f 100%); color:#f3efe3; }
+  .brandmark { display:inline-flex; align-items:center; gap:9px; font-family:var(--serif); font-weight:700; font-size:20px; }
+  .brandmark .dot { width:11px; height:11px; border-radius:50%; background:var(--gold); box-shadow:0 0 0 4px rgba(194,147,47,.25); }
+  .login-top p { margin:8px 0 0; opacity:.9; font-size:13.5px; }
+  .login-body { padding:22px 30px 26px; }
+  #login-error { color:var(--red); font-size:13px; min-height:18px; margin-top:8px; font-weight:600; }
+  .demo { margin-top:20px; border-top:1px dashed var(--line); padding-top:16px; }
+  .demo .demo-h { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:10px; }
+  .democard { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border:1px solid var(--line);
+              border-radius:10px; margin-bottom:7px; cursor:pointer; background:var(--panel2); transition:all .15s ease; }
+  .democard:hover { border-color:var(--blue); transform:translateX(2px); box-shadow:var(--shadow-sm); }
+  .democard .who2 { font-size:12.5px; } .democard .who2 b { font-family:var(--serif); }
+  .democard .cred { font-family:var(--mono); font-size:11px; color:var(--text2); }
 
   /* header */
-  header { display:none; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--panel); align-items:center; justify-content:space-between; }
-  header h1 { font-size:15px; margin:0; font-weight:650; } header h1 span { color:var(--blue); }
-  .hdr-right { display:flex; align-items:center; gap:14px; }
-  .metrics { display:flex; gap:14px; font-size:12px; color:var(--muted); } .metrics b { color:var(--text); }
-  .rolebadge { padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700; }
-  .r-manager{background:rgba(210,153,34,.18);color:var(--amber);} .r-operator{background:rgba(56,139,253,.18);color:var(--blue);}
-  .r-engineer{background:rgba(63,185,80,.18);color:var(--green);} .r-customer{background:rgba(45,212,191,.18);color:var(--teal);}
-  .r-admin{background:rgba(163,113,247,.18);color:var(--purple);}
+  header { display:none; padding:14px 24px; background:var(--panel); border-bottom:1px solid var(--line);
+           align-items:center; justify-content:space-between; position:sticky; top:0; z-index:10; box-shadow:var(--shadow-sm); }
+  header .brand { display:flex; align-items:center; gap:10px; font-family:var(--serif); font-weight:700; font-size:17px; }
+  header .brand .dot { width:10px; height:10px; border-radius:50%; background:var(--gold); }
+  header .brand small { font-family:var(--sans); font-weight:500; color:var(--muted); font-size:12px; letter-spacing:.02em; }
+  .hdr-right { display:flex; align-items:center; gap:16px; }
+  .metrics { display:flex; gap:14px; font-size:12.5px; color:var(--text2); } .metrics b { color:var(--text); font-weight:700; }
+  .rolebadge { padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.02em; }
+  .r-manager{background:rgba(191,138,44,.16);color:#9a6e16;} .r-operator{background:rgba(31,122,109,.16);color:#1b6c60;}
+  .r-engineer{background:rgba(63,143,91,.16);color:#357a4d;} .r-customer{background:rgba(42,157,143,.16);color:#1f857a;}
+  .r-admin{background:rgba(125,91,166,.16);color:#6b4f90;}
 
   /* dashboards */
-  #app { display:none; padding:16px; }
-  .dialogue { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px; }
-  .dialogue .row { display:flex; gap:10px; align-items:flex-end; }
-  .dialogue textarea { min-height:60px; resize:vertical; }
-  #dialogue-error, #matched { font-size:13px; margin-top:8px; }
-  #dialogue-error { color:var(--red); display:none; } #matched { color:var(--muted); display:none; }
+  #app { display:none; padding:22px; max-width:1320px; margin:0 auto; animation:fadeUp .4s ease both; }
+  .dialogue { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:20px; box-shadow:var(--shadow-sm); }
+  .dialogue-title { font-family:var(--serif); font-weight:600; font-size:16px; margin:0 0 10px; }
+  .dialogue .row { display:flex; gap:12px; align-items:flex-end; }
+  .dialogue textarea { min-height:64px; resize:vertical; }
+  #dialogue-error, #matched { font-size:13px; margin-top:10px; }
+  #dialogue-error { color:var(--red); display:none; font-weight:600; } #matched { color:var(--text2); display:none; }
 
-  .grid { display:grid; gap:16px; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
-  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0; padding:11px 14px; border-bottom:1px solid var(--line); }
-  .panel .body { padding:12px 14px; max-height:46vh; overflow:auto; }
-  .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px; }
-  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; text-align:center; }
-  .kpi .v { font-size:24px; font-weight:700; } .kpi .l { font-size:11px; color:var(--muted); text-transform:uppercase; }
+  .grid { display:grid; gap:18px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden;
+           box-shadow:var(--shadow-sm); transition:transform .18s ease, box-shadow .18s ease; animation:fadeUp .4s ease both; }
+  .panel:hover { box-shadow:var(--shadow); transform:translateY(-2px); }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:0;
+              padding:13px 16px; border-bottom:1px solid var(--line); background:var(--panel2); font-family:var(--sans); font-weight:700; }
+  .panel .body { padding:14px 16px; max-height:48vh; overflow:auto; }
+  .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px; }
+  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; text-align:center;
+         box-shadow:var(--shadow-sm); transition:transform .18s ease, box-shadow .18s ease; animation:fadeUp .4s ease both; }
+  .kpi:hover { transform:translateY(-3px); box-shadow:var(--shadow); }
+  .kpi .v { font-family:var(--serif); font-size:30px; font-weight:700; color:var(--blue); line-height:1; }
+  .kpi .l { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:6px; font-weight:600; }
 
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--line); }
-  td { padding:7px 8px; border-bottom:1px solid #21262d; }
-  tr:hover td { background:#1c2230; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { text-align:left; color:var(--muted); font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; padding:8px 9px; border-bottom:1px solid var(--line); }
+  td { padding:9px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  tbody tr, table tr { transition:background .12s ease; }
+  tr:hover td { background:var(--panel2); }
 
-  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; margin:1px 3px 1px 0; }
-  .b-blue{background:rgba(56,139,253,.15);color:var(--blue);} .b-green{background:rgba(63,185,80,.15);color:var(--green);}
-  .b-amber{background:rgba(210,153,34,.15);color:var(--amber);} .b-red{background:rgba(248,81,73,.15);color:var(--red);}
-  .b-purple{background:rgba(163,113,247,.15);color:var(--purple);}
-  .agent-anomaly{background:rgba(248,81,73,.15);color:var(--red);} .agent-knowledge{background:rgba(63,185,80,.15);color:var(--green);}
-  .agent-risk{background:rgba(210,153,34,.15);color:var(--amber);} .agent-explainability{background:rgba(163,113,247,.15);color:var(--purple);}
+  .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; margin:1px 4px 1px 0; }
+  .b-blue{background:rgba(31,122,109,.14);color:#1b6c60;} .b-green{background:rgba(63,143,91,.16);color:#357a4d;}
+  .b-amber{background:rgba(191,138,44,.16);color:#9a6e16;} .b-red{background:rgba(184,71,47,.14);color:#9c3a25;}
+  .b-purple{background:rgba(125,91,166,.16);color:#6b4f90;}
+  .agent-anomaly{background:rgba(184,71,47,.14);color:#9c3a25;} .agent-knowledge{background:rgba(63,143,91,.16);color:#357a4d;}
+  .agent-risk{background:rgba(191,138,44,.16);color:#9a6e16;} .agent-explainability{background:rgba(125,91,166,.16);color:#6b4f90;}
 
   /* case detail */
-  .step { padding:7px 0; border-bottom:1px solid #21262d; display:flex; gap:9px; align-items:baseline; animation:slideIn .2s ease; }
+  .step { padding:8px 0; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:baseline; animation:slideIn .22s ease; }
   @keyframes slideIn { from { opacity:0; transform:translateX(-10px);} to { opacity:1; transform:none;} }
-  .step .n { color:var(--muted); min-width:20px; font-variant-numeric:tabular-nums; }
-  .step .st { font-size:10px; text-transform:uppercase; color:var(--purple); min-width:110px; }
-  .step .de { color:var(--muted); font-size:12px; }
-  .rec { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:9px; }
-  .rec.sel { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
-  .rec h3 { margin:0 0 3px; font-size:13.5px; display:flex; justify-content:space-between; }
-  .rec .desc { color:var(--muted); font-size:12px; margin-bottom:5px; }
-  .rec .rationale { font-size:12px; margin-top:5px; padding-top:5px; border-top:1px dashed #21262d; color:#c9d1d9; }
-  .risk-bar { display:flex; gap:3px; margin-top:6px; } .risk-bar span{height:6px;border-radius:3px;flex:1;background:#21262d;position:relative;overflow:hidden;}
-  .risk-bar span i{position:absolute;inset:0;transform-origin:left;}
-  .risk-legend { font-size:10px; color:var(--muted); margin-top:3px; letter-spacing:.3em; }
-  .spark { display:inline-flex; gap:2px; align-items:flex-end; height:18px; vertical-align:middle; }
-  .spark span { width:5px; background:var(--blue); border-radius:1px; }
-  .bubble { background:#1c2433; border:1px solid var(--blue); border-radius:12px 12px 12px 2px; padding:11px 13px; margin:9px 0; }
-  .bubble .who { font-size:11px; color:var(--blue); font-weight:600; margin-bottom:3px; }
-  .relbar { height:8px; border-radius:5px; background:#21262d; overflow:hidden; margin-top:4px; }
-  .relbar i { display:block; height:100%; }
-  .empty { color:var(--muted); text-align:center; padding:18px; font-size:13px; }
-  .progress { display:flex; gap:4px; margin-top:6px; } .progress div{flex:1;height:6px;border-radius:3px;background:#21262d;}
-  .copybtn { background:none; border:none; cursor:pointer; padding:2px 4px; font-size:12px; }
-  /* customer timeline (novelty) */
-  .timeline-step { display:flex; align-items:center; gap:10px; padding:7px 0; opacity:0.35; transition:opacity .3s; }
-  .timeline-step.past { opacity:0.65; } .timeline-step.current { opacity:1; font-weight:600; }
-  .timeline-icon { font-size:18px; width:28px; text-align:center; } .timeline-label { font-size:13px; }
-  .pulse-dot { width:8px; height:8px; border-radius:50%; background:var(--blue); animation:pulse 1.5s infinite; margin-left:6px; }
-  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.4;transform:scale(1.4);} }
+  .step .n { color:var(--muted); min-width:20px; font-variant-numeric:tabular-nums; font-family:var(--mono); font-size:11px; }
+  .step .st { font-size:10px; text-transform:uppercase; color:var(--purple); min-width:118px; font-weight:600; letter-spacing:.03em; }
+  .step .de { color:var(--text2); font-size:12.5px; }
+  .rec { border:1px solid var(--line); border-radius:11px; padding:12px; margin-bottom:10px; background:var(--panel2);
+         transition:border-color .15s, box-shadow .15s, transform .12s; cursor:pointer; }
+  .rec:hover { border-color:var(--blue); box-shadow:var(--shadow-sm); }
+  .rec.sel { border-color:var(--blue); box-shadow:0 0 0 2px rgba(31,122,109,.25); background:#f3f8f5; }
+  .rec h3 { margin:0 0 4px; font-size:14px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .rec .desc { color:var(--text2); font-size:12.5px; margin-bottom:6px; }
+  .rec .rationale { font-size:12.5px; margin-top:7px; padding-top:7px; border-top:1px dashed var(--line); color:var(--text2); }
+  .risk-bar { display:flex; gap:4px; margin-top:7px; } .risk-bar span{height:7px;border-radius:4px;flex:1;background:#e7ddc9;position:relative;overflow:hidden;}
+  .risk-bar span i{position:absolute;inset:0;transform-origin:left; transition:transform .4s ease;}
+  .risk-legend { font-size:10px; color:var(--muted); margin-top:4px; letter-spacing:.35em; font-weight:600; }
+  .spark { display:inline-flex; gap:3px; align-items:flex-end; height:18px; vertical-align:middle; }
+  .spark span { width:5px; background:var(--blue); border-radius:2px; }
+  .bubble { background:#eff6f3; border:1px solid #bfe0d8; border-radius:14px 14px 14px 3px; padding:12px 14px; margin:10px 0; animation:floatIn .3s ease both; }
+  .bubble .who { font-size:11px; color:var(--blue); font-weight:700; margin-bottom:4px; letter-spacing:.02em; }
+  .relbar { height:9px; border-radius:6px; background:#e7ddc9; overflow:hidden; margin-top:5px; }
+  .relbar i { display:block; height:100%; transition:width .5s ease; }
+  .empty { color:var(--muted); text-align:center; padding:22px; font-size:13.5px; font-style:italic; }
+  .pill { font-size:11.5px; color:var(--text2); }
+  .copybtn { background:none; border:none; cursor:pointer; padding:2px 4px; font-size:13px; }
+  .copybtn:hover { transform:none; box-shadow:none; }
+  /* customer timeline */
+  .timeline-step { display:flex; align-items:center; gap:11px; padding:8px 0; opacity:0.32; transition:opacity .35s; }
+  .timeline-step.past { opacity:0.6; } .timeline-step.current { opacity:1; font-weight:700; }
+  .timeline-icon { font-size:19px; width:30px; text-align:center; } .timeline-label { font-size:13.5px; }
+  .pulse-dot { width:9px; height:9px; border-radius:50%; background:var(--blue); animation:pulse 1.5s infinite; margin-left:6px; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.35;transform:scale(1.5);} }
   /* gate status bar */
-  .gatebar { display:flex; align-items:stretch; gap:6px; margin:4px 0 12px; }
-  .gate { flex:1; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
-  .gate-h { font-size:12px; font-weight:600; } .gate-sub { font-size:11px; color:var(--muted); margin-top:2px; }
-  .gate-arrow { align-self:center; color:var(--muted); }
-  .gate-done { border-color:var(--green); background:rgba(63,185,80,.08); } .gate-done .gate-h{color:var(--green);}
-  .gate-active { border-color:var(--amber); background:rgba(210,153,34,.08); animation:pulse 1.8s infinite; } .gate-active .gate-h{color:var(--amber);}
-  .gate-pending { opacity:.55; }
-  .stars { font-size:24px; cursor:pointer; user-select:none; } .stars span:hover { opacity:.7; }
+  .gatebar { display:flex; align-items:stretch; gap:8px; margin:6px 0 14px; }
+  .gate { flex:1; border:1px solid var(--line); border-radius:11px; padding:10px 12px; background:var(--panel2); transition:all .2s ease; }
+  .gate-h { font-size:12.5px; font-weight:700; } .gate-sub { font-size:11px; color:var(--muted); margin-top:3px; }
+  .gate-arrow { align-self:center; color:var(--muted); font-size:18px; }
+  .gate-done { border-color:#9fcdb4; background:#eef7f0; } .gate-done .gate-h{color:#357a4d;}
+  .gate-active { border-color:#e3c987; background:#fbf3df; animation:pulse 2s infinite; } .gate-active .gate-h{color:#9a6e16;}
+  .gate-pending { opacity:.5; }
+  .stars { font-size:26px; cursor:pointer; user-select:none; color:var(--gold); letter-spacing:3px; }
+  .stars span:hover { opacity:.6; }
 </style>
 </head>
 <body>
 
 <!-- ============ LOGIN ============ -->
 <div id="login">
-  <h1>Intelligent <span>NBA</span> Platform</h1>
-  <p class="sub">Agentic Decision Intelligence — sign in to your role dashboard</p>
-  <label>Email</label><input id="li-email" value="manager@energy.com" />
-  <label>Password</label><input id="li-pass" type="password" value="manager123" onkeydown="if(event.key==='Enter')doLogin()" />
-  <div id="login-error"></div>
-  <button class="primary" style="width:100%;margin-top:12px" onclick="doLogin()">Sign in</button>
-  <div class="demo">
-    <div style="margin-bottom:6px">Demo accounts (click to fill):</div>
-    <div><code onclick="fill('manager@energy.com','manager123')">manager@energy.com / manager123</code> — approves P1/P2</div>
-    <div><code onclick="fill('operator@energy.com','operator123')">operator@energy.com / operator123</code> — triggers + P3/P4</div>
-    <div><code onclick="fill('engineer@energy.com','engineer123')">engineer@energy.com / engineer123</code> — work orders (read-only)</div>
-    <div><code onclick="fill('customer@energy.com','customer123')">customer@energy.com / customer123</code> — complaints + status</div>
-    <div><code onclick="fill('admin@energy.com','admin123')">admin@energy.com / admin123</code> — everything + audit</div>
+  <div class="login-top">
+    <div class="brandmark"><span class="dot"></span> Northwind Power</div>
+    <p>Next Best Action — agentic decision intelligence. Sign in to your role workspace.</p>
+  </div>
+  <div class="login-body">
+    <label>Work email</label><input id="li-email" value="sarah.chen@northwindpower.com" />
+    <label>Password</label><input id="li-pass" type="password" value="Manager#2024" onkeydown="if(event.key==='Enter')doLogin()" />
+    <div id="login-error"></div>
+    <button class="primary" style="width:100%;margin-top:16px" onclick="doLogin()">Sign in</button>
+    <div class="demo">
+      <div class="demo-h">Demo accounts — click to fill</div>
+      <div class="democard" onclick="fill('sarah.chen@northwindpower.com','Manager#2024')">
+        <span class="who2"><b>Sarah Chen</b> · Manager <span class="pill">approves P1/P2</span></span>
+        <span class="cred">Manager#2024</span></div>
+      <div class="democard" onclick="fill('james.okafor@northwindpower.com','Operator#2024')">
+        <span class="who2"><b>James Okafor</b> · Operator <span class="pill">triggers + P3/P4</span></span>
+        <span class="cred">Operator#2024</span></div>
+      <div class="democard" onclick="fill('priya.sharma@northwindpower.com','Engineer#2024')">
+        <span class="who2"><b>Priya Sharma</b> · Engineer <span class="pill">field work</span></span>
+        <span class="cred">Engineer#2024</span></div>
+      <div class="democard" onclick="fill('alex.rivera@northwindpower.com','Customer#2024')">
+        <span class="who2"><b>Alex Rivera</b> · Customer <span class="pill">complaints</span></span>
+        <span class="cred">Customer#2024</span></div>
+      <div class="democard" onclick="fill('morgan.blake@northwindpower.com','Admin#2024')">
+        <span class="who2"><b>Morgan Blake</b> · Admin <span class="pill">everything</span></span>
+        <span class="cred">Admin#2024</span></div>
+    </div>
   </div>
 </div>
 
 <!-- ============ APP ============ -->
 <header id="header">
-  <h1>Intelligent <span>Next Best Action</span> Platform</h1>
+  <div class="brand"><span class="dot"></span> Northwind Power <small>Next Best Action</small></div>
   <div class="hdr-right">
     <div class="metrics" id="metrics"></div>
     <span id="rolebadge" class="rolebadge"></span>
@@ -204,7 +266,7 @@ function managerHTML(isAdmin) {
     <div class="panel"><h2>Active cases</h2><div class="body" id="cases"></div></div>
     <div class="panel"><h2>Approval queue (needs you)</h2><div class="body" id="queue"></div></div>
   </div>
-  <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
+  <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-top:18px">
     <div class="panel"><h2>Case detail</h2><div class="body" id="detail"><div class="empty">Select a case.</div></div></div>
     <div class="panel"><h2>${isAdmin?'Audit / all sessions':'Analytics'}</h2><div class="body" id="analytics"></div></div>
   </div>`;
@@ -212,15 +274,16 @@ function managerHTML(isAdmin) {
 function operatorHTML() {
   return `
   <div class="dialogue">
+    <div class="dialogue-title">Report an operational issue</div>
     <div class="row">
-      <textarea id="dlg" placeholder="Describe your problem in plain English — e.g. 'The TR-441 transformer temperature is rising fast and we have 2400 customers affected'"></textarea>
+      <textarea id="dlg" placeholder="Describe the problem in plain English — e.g. 'The TR-441 transformer temperature is rising fast and we have 2400 customers affected'"></textarea>
       <button class="primary" onclick="submitDialogue()">Submit</button>
     </div>
     <div id="dialogue-error"></div><div id="matched"></div>
   </div>
   <div class="grid" style="grid-template-columns:1fr 1.3fr">
     <div>
-      <div class="panel" style="margin-bottom:16px"><h2>HITL queue (P3/P4)</h2><div class="body" id="queue"></div></div>
+      <div class="panel" style="margin-bottom:18px"><h2>HITL queue (P3/P4)</h2><div class="body" id="queue"></div></div>
       <div class="panel"><h2>My cases</h2><div class="body" id="cases"></div></div>
     </div>
     <div class="panel"><h2>Case detail</h2><div class="body" id="detail"><div class="empty">Submit a problem or open a case.</div></div></div>
@@ -230,7 +293,7 @@ function engineerHTML() {
   return `
   <div class="grid" style="grid-template-columns:1fr 1.3fr">
     <div>
-      <div class="panel" style="margin-bottom:16px"><h2>Assigned work orders</h2><div class="body" id="workorders"></div></div>
+      <div class="panel" style="margin-bottom:18px"><h2>Assigned work orders</h2><div class="body" id="workorders"></div></div>
       <div class="panel"><h2>Asset health</h2><div class="body" id="assets"></div></div>
     </div>
     <div class="panel"><h2>Case detail (read-only)</h2><div class="body" id="detail"><div class="empty">Open a work order's case.</div></div></div>
@@ -239,9 +302,10 @@ function engineerHTML() {
 function customerHTML() {
   return `
   <div class="dialogue">
+    <div class="dialogue-title">How can we help?</div>
     <div class="row">
       <textarea id="dlg" placeholder="Describe your service issue — e.g. 'My power keeps going out and my last invoice looks wrong'"></textarea>
-      <button class="primary" onclick="submitDialogue()">Submit complaint</button>
+      <button class="primary" onclick="submitDialogue()">Submit</button>
     </div>
     <div id="dialogue-error"></div><div id="matched"></div>
   </div>
@@ -285,7 +349,7 @@ function renderQueue(s){ const el=document.getElementById('queue'); if(!el)retur
   if(!q.length){el.innerHTML='<div class="empty">Nothing awaiting approval.</div>';return;}
   el.innerHTML = q.map(x=>{
     const req=x.required_role||'operator'; const canAct=ROLE_RANK[ME.role]<=ROLE_RANK[req];
-    return `<div class="rec"><h3><span>${x.event_type||(x.event&&x.event.type)}</span>${fmtState(x.state)}</h3>
+    return `<div class="rec" onclick="openCase('${x.session_id}')"><h3><span>${x.event_type||(x.event&&x.event.type)}</span>${fmtState(x.state)}</h3>
       <div class="desc">urgency ${x.urgency||'?'} · needs <b>${req}</b> approval</div>
       <button class="${canAct?'primary':''}" onclick="openCase('${x.session_id}')">${canAct?'Review & approve':'View (no authority)'}</button></div>`;
   }).join('');
@@ -304,7 +368,6 @@ async function renderWorkOrders(s){ const el=document.getElementById('workorders
       state:x.state, severity:(snap.event&&snap.event.severity)||'INFO',
       needsUpdate:snap.awaiting_work_update, blocked:(snap.work_update||{}).status==='blocked'});
   }
-  // Feature 4: blocked first, then by severity, then needs-update.
   rows.sort((a,b)=> (b.blocked-a.blocked) || (SEV_RANK[a.severity]-SEV_RANK[b.severity]) || (b.needsUpdate-a.needsUpdate));
   el.innerHTML = rows.length ? `<table><tr><th>Work order</th><th>Asset</th><th>State</th><th></th></tr>`+
     rows.map(r=>`<tr><td><code>${r.wo}</code>${SEV_RANK[r.severity]<=1?' <span class="badge b-red">URGENT</span>':''}
@@ -332,7 +395,7 @@ async function submitDialogue() {
   const ex=d.extracted_event||{};
   md.innerHTML=`Parsed → <b>${ex.event_type}</b> · ${ex.severity}`+(ex.asset_id?` · <b>${ex.asset_id}</b>`:'')+
     (ex.customer_count?` · ${ex.customer_count} customers`:'')+
-    `<div style="margin-top:5px">Matched agents: ${(d.matched_agents||[]).map(a=>`<span class="badge agent-${a} b-blue">${a}</span>`).join('')}</div>`;
+    `<div style="margin-top:6px">Matched specialists: ${(d.matched_agents||[]).map(a=>`<span class="badge agent-${a} b-blue">${a}</span>`).join('')}</div>`;
   openCase(d.session_id);
 }
 
@@ -350,10 +413,8 @@ async function renderDetail() {
     <button class="copybtn" title="copy session id" onclick="copySid()">📋</button></div>
     <span style="color:var(--muted);font-size:12px">cost $${(snap.total_cost_usd||0).toFixed(5)}</span></div>`;
 
-  // command & confirmation chain (operator/manager/engineer view)
   if (ME.role!=='customer') html += gateBar(snap);
 
-  // relevance indicator
   if (snap.relevance_score!=null) {
     const r=snap.relevance_score, col=r<0.3?'var(--red)':r<0.7?'var(--amber)':'var(--green)';
     const lbl=r<0.3?'Low relevance — add more context':r<0.7?'Medium relevance':'High relevance';
@@ -361,29 +422,23 @@ async function renderDetail() {
       <div class="relbar"><i style="width:${Math.round(r*100)}%;background:${col}"></i></div></div>`;
   }
 
-  // customer status tracker — friendly timeline + ETA + CSAT
   if (ME.role==='customer') {
-    // Feature 3: live ETA while engineer on site
     const ws=snap.work_status_update;
     if (ws && snap.state==='EXECUTING') {
       html += `<div class="badge b-blue" style="margin:6px 0">🔧 ${ws.engineer_name} on site — ~${ws.remaining_eta_min} min remaining</div>`;
     }
-    // Novelty: human-readable timeline
     html += `<div style="margin:8px 0">`+renderCustomerTimeline(snap.state)+`</div>`;
-    // Feature 2: CSAT after resolution
     if (['RESOLVED','CLOSED'].includes(snap.state) && snap.csat_score!=null) {
       const pct=Math.round(snap.csat_score*100), stars=Math.round(snap.csat_score*5);
-      html += `<div class="rec" style="border-color:var(--green)"><h3><span>✅ Issue resolved</span></h3>
-        <div>Your satisfaction score: <b>${'★'.repeat(stars)}${'☆'.repeat(5-stars)}</b> (${pct}%)</div>
+      html += `<div class="rec" style="border-color:#9fcdb4;background:#eef7f0;cursor:default"><h3><span>✅ Issue resolved</span></h3>
+        <div>Your satisfaction score: <b style="color:var(--gold)">${'★'.repeat(stars)}${'☆'.repeat(5-stars)}</b> (${pct}%)</div>
         ${snap.csat_factors?`<div class="desc">Resolved after ${snap.csat_factors.iterations} iteration(s) · ${snap.csat_factors.urgency}</div>`:''}
         <div class="desc">Thank you for your patience.</div></div>`;
     }
   } else {
-    // live trace (animated)
     html += `<div style="margin:8px 0;max-height:30vh;overflow:auto">`+
       (snap.trace||[]).slice(-40).map(s=>`<div class="step"><span class="n">${s.step}</span><span class="st">${s.state}</span>
         <span><b>${s.title}</b> ${s.detail?`<span class="de">— ${s.detail}</span>`:''}</span></div>`).join('')+`</div>`;
-    // confidence decay sparkline
     const decays=(snap.trace||[]).filter(s=>s.title&&s.title.includes('Confidence decay')).length;
     if (decays>0) { const base=(snap.candidates&&snap.candidates[0]?snap.candidates[0].confidence:0.9);
       let bars=''; for(let i=0;i<=decays;i++){ const v=base*Math.pow(0.85,i); bars+=`<span style="height:${Math.max(3,v*18)}px"></span>`; }
@@ -397,7 +452,7 @@ async function renderDetail() {
 
 function riskBar(risk){ if(!risk)return'';
   const dims=['safety','financial','compliance','reputational','operational'];
-  const col=v=>v>=0.85?'#f85149':v>=0.6?'#d29922':v>=0.3?'#388bfd':'#3fb950';
+  const col=v=>v>=0.85?'#b8472f':v>=0.6?'#bf8a2c':v>=0.3?'#1f7a6d':'#3f8f5b';
   return `<div class="risk-bar">`+dims.map(d=>{const v=risk[d]||0; const lvl=v>=0.85?'CRITICAL':v>=0.6?'HIGH':v>=0.3?'MED':'LOW';
     return `<span title="${d}: ${v} (${lvl})"><i style="background:${col(v)};transform:scaleX(${v})"></i></span>`;}).join('')+
     `</div><div class="risk-legend">S · F · C · R · O</div>`;
@@ -417,21 +472,19 @@ function renderReco(snap) {
       <div class="desc">${c.description}</div>${riskBar(c.risk)}
       ${e.rationale?`<div class="rationale">${e.rationale}</div>`:''}</div>`;}).join('');
 
-  // approval gating
   const canApprove = ME.permissions && ME.permissions.can_approve;
   const req=snap.required_role; const hasAuthority = !req || ROLE_RANK[ME.role]<=ROLE_RANK[req];
   if (snap.awaiting_human) {
     if (canApprove && hasAuthority) {
       html += `<textarea id="mod" rows="2" placeholder="Modification / comment (optional)" style="margin:8px 0"></textarea>
         <div style="display:flex;gap:8px">
-          <button class="green" onclick="decide('approved')">Approve</button>
-          <button class="primary" onclick="decide('modified')">Approve + modify</button>
+          <button class="green" onclick="decide('approved')">Authorise &amp; execute</button>
+          <button class="primary" onclick="decide('modified')">Modify &amp; authorise</button>
           <button class="red" onclick="decide('rejected')">Reject</button></div>`;
     } else {
-      html += `<div class="badge b-amber" style="margin-top:8px">Awaiting <b>${req||'operator'}</b> approval — your role (${ME.role}) cannot approve this ${snap.routing?'('+(snap.routing.reason||'')+')':''}</div>`;
+      html += `<div class="badge b-amber" style="margin-top:8px">Awaiting <b>${req||'operator'}</b> approval — your role (${ME.role}) cannot authorise this ${snap.routing?'('+(snap.routing.reason||'')+')':''}</div>`;
     }
   } else if (snap.awaiting_work_update) {
-    // Gate 2: the assigned worker (engineer for field, operator for processing) confirms.
     const t=snap.gate2_task||{}; const wr=t.worker_role||'engineer'; const isField=t.is_field!==false;
     const wo=t.work_order_id||(snap.exec_result||{}).work_order_id||'';
     const canDo = ME.role==='admin' || ME.role===wr;
@@ -448,12 +501,11 @@ function renderReco(snap) {
       html += `<div class="badge b-blue" style="margin-top:8px">🔧 Awaiting ${wr} confirmation…</div>`;
     }
   } else if (snap.awaiting_feedback && snap.followup_question) {
-    // Gate 3: the resolution question is FOR THE CUSTOMER only.
     if (ME.role==='customer' || snap.feedback_target!=='customer') {
       const showToCustomer = ME.role==='customer';
       html += (showToCustomer && snap.work_notes_for_customer
                 ? `<div class="pill" style="margin-bottom:6px">What we did: "${snap.work_notes_for_customer}"</div>` : '')
-        + `<div class="bubble"><div class="who">NBA assistant</div><div>${snap.followup_question}</div></div>
+        + `<div class="bubble"><div class="who">Northwind Support</div><div>${snap.followup_question}</div></div>
         <textarea id="fbcomment" rows="2" placeholder="Your comments (optional)…" style="margin:8px 0"></textarea>
         <div style="display:flex;gap:8px"><button class="green" onclick="feedback(true)">Yes, resolved ✓</button>
         <button class="red" onclick="feedback(false)">No, still an issue ✗</button></div>`;
@@ -466,7 +518,6 @@ function renderReco(snap) {
     html += `<div class="badge ${review.decision==='rejected'?'b-red':'b-green'}" style="margin-top:8px">
       ${review.decision}${review.auto_approved?' (auto)':''}${review.approved_by_name?(' · by '+review.approved_by_name):''}</div>
       ${v.resolved!==undefined?`<div style="font-size:12px;color:var(--muted);margin-top:6px">Verification: ${v.resolved?'✓ resolved':(v.partial_resolve?'~ partial':'✗ not resolved')}</div>`:''}`;
-    // Gate 3 closed: let the customer leave a star rating.
     if (ME.role==='customer' && snap.customer_confirmed_resolution && snap.csat_score==null) {
       html += `<div style="margin-top:10px">Rate your experience: <span class="stars" id="stars">
         ${[1,2,3,4,5].map(n=>`<span onclick="submitCsat(${n})">☆</span>`).join('')}</span></div>`;
@@ -479,7 +530,6 @@ function pick(sid,id){ window._sel[sid]=id; renderDetail(); }
 async function decide(decision){
   const mod=(document.getElementById('mod')||{}).value||'';
   if (decision!=='rejected') {
-    const sel=window._sel[CURSID];
     if (!confirm(`You are authorising this action. This will dispatch crew / processing and cannot be undone. Confirm?`)) return;
   }
   const r=await api('/api/sessions/'+CURSID+'/decision',{method:'POST',body:JSON.stringify({decision,selected_action:window._sel[CURSID],modifications:mod?[mod]:[],comments:mod})});
@@ -495,7 +545,7 @@ async function submitCsat(score){
   await api('/api/sessions/'+CURSID+'/csat',{method:'POST',body:JSON.stringify({score})});
   renderDetail();
 }
-// Command & confirmation gate chain (Gate 1 → Gate 2 → Gate 3)
+
 function gateBar(snap){
   const hr=snap.human_review||{};
   const g1done = hr.decision && hr.decision!=='pending' && (hr.approved_by_name || hr.auto_approved);
@@ -515,7 +565,6 @@ function gateBar(snap){
     <div class="gate-arrow">→</div>${cell('✅','Gate 3: Customer',g3sub,g3done,g3active)}</div>`;
 }
 
-// Novelty: customer-friendly milestone timeline
 const CUSTOMER_TIMELINE = {
   INITIATED:{label:"Issue received",icon:"📥"}, CONTEXT_LOADED:{label:"Reviewing your account",icon:"🔍"},
   PLAN_CREATED:{label:"Diagnosing the problem",icon:"🧠"}, AGENTS_RUNNING:{label:"Running diagnostics",icon:"⚡"},

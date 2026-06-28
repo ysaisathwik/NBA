@@ -17,12 +17,13 @@ from typing import Any
 SECRET = os.getenv("JWT_SECRET", "nba-platform-dev-secret-change-in-prod")
 
 # Hardcoded demo users — in prod, replace with Supabase Auth lookup.
+# Company: Northwind Power. Emails follow firstname.lastname@northwindpower.com.
 USERS = {
-    "manager@energy.com":  {"password": "manager123",  "role": "manager",  "name": "Sarah Chen",   "id": "u-mgr-01"},
-    "operator@energy.com": {"password": "operator123", "role": "operator", "name": "James Okafor", "id": "u-opr-01"},
-    "engineer@energy.com": {"password": "engineer123", "role": "engineer", "name": "Priya Sharma", "id": "u-eng-01"},
-    "customer@energy.com": {"password": "customer123", "role": "customer", "name": "Alex Rivera",   "id": "u-cst-01"},
-    "admin@energy.com":    {"password": "admin123",    "role": "admin",    "name": "Morgan Blake",  "id": "u-adm-01"},
+    "sarah.chen@northwindpower.com":   {"password": "Manager#2024",  "role": "manager",  "name": "Sarah Chen",   "id": "u-mgr-01"},
+    "james.okafor@northwindpower.com": {"password": "Operator#2024", "role": "operator", "name": "James Okafor", "id": "u-opr-01"},
+    "priya.sharma@northwindpower.com": {"password": "Engineer#2024", "role": "engineer", "name": "Priya Sharma", "id": "u-eng-01"},
+    "alex.rivera@northwindpower.com":  {"password": "Customer#2024", "role": "customer", "name": "Alex Rivera",  "id": "u-cst-01"},
+    "morgan.blake@northwindpower.com": {"password": "Admin#2024",    "role": "admin",    "name": "Morgan Blake", "id": "u-adm-01"},
 }
 
 ROLE_PERMISSIONS = {

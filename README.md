@@ -1,4 +1,4 @@
-# Intelligent Next Best Action (NBA) Platform
+# Northwind Power — Intelligent Next Best Action (NBA) Platform
 
 An **Agentic Decision Intelligence Platform** that turns customer interactions and
 enterprise knowledge into explainable, human-reviewed **next best actions**.
@@ -8,9 +8,18 @@ constellation of specialist agents, each backed by purpose-specific tools, over 
 multi-tier memory, with a **goal loop** that verifies resolution and replans until the goal
 is reached.
 
-> Reference business domain: **B2B Energy Operations** (transformer/grid asset health).
-> The platform is domain-agnostic — swap the `domain/` pack to retarget SaaS Sales, Staffing,
-> Customer Success, etc.
+Every case runs on **commands and confirmations** — agents are analysts, humans decide.
+A case only closes after passing **three human checkpoints**:
+**Gate 1 — Authorise** (manager/operator), **Gate 2 — Work done** (engineer or operator),
+**Gate 3 — Customer confirmation**. Nothing auto-closes silently.
+
+> Reference business domain: **B2B Energy Operations** (transformer/grid asset health),
+> demoed as the fictional utility **Northwind Power**. The platform is domain-agnostic —
+> swap the `domain/` pack to retarget SaaS Sales, Staffing, Customer Success, etc.
+
+The web UI is a warm, cream-themed role workspace (Fraunces + Inter typography) with a live
+`Gate 1 → Gate 2 → Gate 3` status bar, animated agent trace, risk heat-bars, and a
+customer-facing progress timeline.
 
 ---
 
@@ -79,13 +88,13 @@ Key endpoints: `POST /api/dialogue` (free-text → event + matched agents),
 ### Sign in with a role (multi-role dashboards)
 The UI opens on a **login screen**. Pick a demo account to see its dashboard:
 
-| Email | Password | Role | Dashboard |
-|---|---|---|---|
-| manager@energy.com | manager123 | manager | KPIs, all cases, **approval queue (P1/P2)**, analytics |
-| operator@energy.com | operator123 | operator | dialogue box, my cases, **HITL queue (P3/P4)** |
-| engineer@energy.com | engineer123 | engineer | assigned work orders, asset health (read-only) |
-| customer@energy.com | customer123 | customer | my service cases + status tracker, file a complaint |
-| admin@energy.com | admin123 | admin | everything + audit |
+| Name | Email | Password | Role | Dashboard |
+|---|---|---|---|---|
+| Sarah Chen | sarah.chen@northwindpower.com | `Manager#2024` | manager | KPIs, all cases, **approval queue (P1/P2)**, analytics |
+| James Okafor | james.okafor@northwindpower.com | `Operator#2024` | operator | dialogue box, my cases, **HITL queue (P3/P4)** |
+| Priya Sharma | priya.sharma@northwindpower.com | `Engineer#2024` | engineer | assigned work orders, asset health (read-only) |
+| Alex Rivera | alex.rivera@northwindpower.com | `Customer#2024` | customer | my service cases + status tracker, file a complaint |
+| Morgan Blake | morgan.blake@northwindpower.com | `Admin#2024` | admin | everything + audit |
 
 **Guardrails:** nonsense / "No problem" / out-of-domain input is rejected (422) with a helpful
 message — no session starts. **Tiered approval:** P1/P2 require **manager+**; an operator
@@ -129,11 +138,11 @@ Open http://localhost:8000
 Demo credentials:
 | Role | Email | Password |
 |---|---|---|
-| Manager | manager@energy.com | manager123 |
-| Operator | operator@energy.com | operator123 |
-| Engineer | engineer@energy.com | engineer123 |
-| Customer | customer@energy.com | customer123 |
-| Admin | admin@energy.com | admin123 |
+| Manager | sarah.chen@northwindpower.com | `Manager#2024` |
+| Operator | james.okafor@northwindpower.com | `Operator#2024` |
+| Engineer | priya.sharma@northwindpower.com | `Engineer#2024` |
+| Customer | alex.rivera@northwindpower.com | `Customer#2024` |
+| Admin | morgan.blake@northwindpower.com | `Admin#2024` |
 
 ### Offline demo (no API key)
 ```bash
