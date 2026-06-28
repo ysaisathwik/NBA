@@ -42,6 +42,9 @@ class Settings:
     # confidences are lower-scale, so the default is calibrated to 0.85 (override via env if desired).
     auto_approve_confidence: float = 0.85
     auto_approve_risk: float = 0.30
+    # Human-in-the-middle policy: customer-originated cases require a human reviewer and a
+    # customer confirmation; never auto-closed. Flip to True only for fully autonomous demos.
+    auto_approve_customer_cases: bool = field(default_factory=lambda: _flag("NBA_AUTO_APPROVE_CUSTOMER"))
 
     @property
     def llm_available(self) -> bool:

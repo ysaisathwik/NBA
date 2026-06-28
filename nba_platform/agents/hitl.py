@@ -59,15 +59,29 @@ class HITLAgent(Agent):
                 "required_role": routing["required_role"]}
 
     def _auto_approvable(self, session, top, risk_blob, urgency) -> bool:
-        """Auto-approve is ONLY eligible for P3/P4, low-risk, whitelisted, safety≈0 actions."""
+        """Auto-approve is ONLY eligible for P3/P4, low-risk, whitelisted, safety≈0 actions.
+
+        Customer-originated cases are NEVER auto-approved: a complaint must pass through a
+        human (operator) and end with the customer's own confirmation — automation runs in
+        between, but never closes a customer case unattended.
+        """
         from ..auth import AUTO_APPROVE_ROLES
+
+        s = self.platform.settings
+        intent = session.mem.get_state("intent", {}) or {}
+        primary = intent.get("primary_intent", "")
+
+        # Human-in-the-middle policy (configurable + domain-driven).
+        if session.mem.get_state("originated_by") == "customer" and not s.auto_approve_customer_cases:
+            return False
+        if primary in getattr(self.domain, "NEVER_AUTO_APPROVE_INTENTS", set()):
+            return False
 
         if session.mem.get_state("force_human_review") or session.mem.get_context().get("cold_start"):
             return False
         # P1/P2 NEVER auto-approve regardless of confidence/risk — safety policy.
         if urgency in {"P1", "P2"} or urgency not in AUTO_APPROVE_ROLES:
             return False
-        s = self.platform.settings
         agg = risk_blob.get("aggregate") or self._fallback_risk(session, top)
         dims_ok = all(agg.get(k, 1.0) <= s.auto_approve_risk
                       for k in ("financial", "safety", "compliance", "reputational", "operational"))

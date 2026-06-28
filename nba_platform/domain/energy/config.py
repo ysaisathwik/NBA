@@ -173,6 +173,11 @@ def risk_for(action_type: str, context: dict[str, Any]) -> dict[str, float]:
 
 AUTO_APPROVE_WHITELIST = {"cooling_boost_monitor", "schedule_callback", "schedule_maintenance", "billing_adjustment"}
 
+# Intents that ALWAYS require a human reviewer (and customer confirmation) — never auto-closed.
+# Customer submissions are normalised to customer_complaint, so this guarantees a human + a
+# customer confirmation for every customer-raised issue (e.g. a "wrong invoice" complaint).
+NEVER_AUTO_APPROVE_INTENTS = {"customer_complaint"}
+
 
 # --------------------------------------------------------------------------- #
 # Planner fallback templates (event_type -> agent subset)  +  intervention effects

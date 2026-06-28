@@ -125,7 +125,10 @@ class Orchestrator:
         self.platform.agent("explainability").run(session)
         session.set_state(CaseState.RECOMMENDATION_READY)
 
-        # 5) Human-in-the-Loop
+        # 5) Human-in-the-Loop. Customer-raised issues always pass through a person.
+        if session.mem.get_state("originated_by") == "customer":
+            session.log("Customer request — human review required",
+                        detail="customer-originated case will not be auto-closed")
         session.set_state(CaseState.HUMAN_REVIEW)
         hitl_res = self.platform.agent("hitl").run(session)
         review = session.mem.get_blob("human_review", {}) or {}
@@ -144,11 +147,12 @@ class Orchestrator:
             self._compress_and_learn(session)
             return
 
-        # 6) Generate the first dynamic follow-up question (interactive mode only).
-        if self.feedback_provider and review.get("decision") in {"approved", "modified"} \
-                and not review.get("auto_approved"):
-            q = self.platform.agent("hitl").generate_followup(session, review)
-            session.log("Follow-up question prepared", detail=q)
+        # 6) Confirmation handoff — the approval is a command that authorises execution.
+        if review.get("decision") in {"approved", "modified"}:
+            who = review.get("approved_by_name") or review.get("approved_by_role") \
+                or ("auto-approve engine" if review.get("auto_approved") else "reviewer")
+            session.log("Approval confirmed — handoff to execution",
+                        detail=f"authorised by {who}")
 
         # 7) Execution
         session.set_state(CaseState.EXECUTING)

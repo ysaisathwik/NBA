@@ -150,6 +150,34 @@ def test_engineer_blocked_then_completed():
     assert any("Work blocked" in s["title"] for s in snap["trace"])
 
 
+def test_customer_complaint_requires_human_and_confirmation():
+    """A customer's complaint must pass through a human (operator) and end with the customer's
+    own confirmation — never auto-closed (the 'wrong invoice closed with no man in the middle' fix)."""
+    c = client()
+    cust = auth(c, "customer@energy.com", "customer123")
+    op = auth(c, "operator@energy.com", "operator123")
+    r = c.post("/api/dialogue", headers=cust, json={
+        "raw_dialogue": "My latest invoice is wrong — I was overcharged on my billing statement with no clearance."}).json()
+    sid = r["session_id"]
+
+    # NOT auto-closed: a human reviewer is required.
+    snap = _wait(c, sid, op, lambda s: s.get("awaiting_human") or s.get("state") == "CLOSED")
+    assert snap.get("awaiting_human") is True
+    assert (snap.get("human_review") or {}).get("auto_approved") is not True
+    assert snap.get("required_role") == "operator"
+
+    # operator (human in the middle) approves
+    c.post(f"/api/sessions/{sid}/decision", headers=op,
+           json={"decision": "approved", "selected_action": snap["candidates"][0]["id"]})
+
+    # then the CUSTOMER must confirm resolution (feedback), not the operator
+    snap = _wait(c, sid, op, lambda s: s.get("awaiting_feedback"))
+    assert snap.get("feedback_target") == "customer"
+    c.post(f"/api/sessions/{sid}/feedback", json={"resolved": True}, headers=cust)
+    final = _wait(c, sid, op, lambda s: s.get("state") == "CLOSED")
+    assert final["state"] == "CLOSED"
+
+
 def test_p4_billing_auto_approves_without_human():
     c = client()
     op = auth(c, "operator@energy.com", "operator123")

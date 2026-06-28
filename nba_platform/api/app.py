@@ -207,6 +207,7 @@ def create_event(payload: EventIn,
         event.customer_id = user["email"]
     session = platform.new_session(event)
     session.mem.set_state("triggered_by", user["id"])
+    session.mem.set_state("originated_by", user["role"])
     _start(session)
     return {"session_id": session.sid}
 
@@ -235,6 +236,7 @@ def submit_dialogue(payload: DialogueIn, user: dict = Depends(require_auth)) -> 
         event.customer_id = user["email"]
     session = platform.new_session(event)
     session.mem.set_state("triggered_by", user["id"])
+    session.mem.set_state("originated_by", user["role"])
     # hand the keyword-matched agents to the Planner via session state
     session.mem.set_state("matched_agents", parsed["matched_agents"])
     session.mem.set_blob("extracted_event", parsed)
