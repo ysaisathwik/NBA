@@ -113,6 +113,45 @@ class HITLAgent(Agent):
         session.mem.set_blob("followup_question", question)
         return question
 
+    # ---- customer-facing iterative feedback (v4) ------------------------
+    def generate_customer_followup(self, session, decision: dict[str, Any]) -> str:
+        """Resolution-check question phrased FOR THE CUSTOMER (not the operator)."""
+        action_type = self._action_type(session, decision)
+        asset = session.event.asset_id or "your service"
+        raw = session.event.raw_content or session.event.type
+        q = self.llm.complete(
+            system=("You are a B2B energy customer service assistant. Write ONE simple, friendly "
+                    "question asking the customer whether their issue is resolved. Avoid jargon. "
+                    "Max 25 words. Address the customer directly as 'you'."),
+            user=(f"A customer reported: {raw!r}. Our team performed: {action_type} on {asset}. "
+                  "Ask the customer if the issue is now resolved."),
+            fast=True,
+        )
+        question = (q or "").strip() or (
+            f"Hi! Our team has completed the necessary work on {asset}. "
+            "Has your issue been resolved to your satisfaction?")
+        session.mem.set_blob("followup_question", question)
+        session.mem.set_state("feedback_target", "customer")
+        return question
+
+    def generate_specific_customer_followup(self, session, decision: dict[str, Any]) -> str:
+        """More specific, customer-friendly question when the issue persists."""
+        asset = session.event.asset_id or "your service"
+        raw = session.event.raw_content or session.event.type
+        q = self.llm.complete(
+            system=("You are a B2B energy customer service assistant. The customer says their issue "
+                    "is not yet resolved. Write ONE friendly, specific question to understand what "
+                    "they are still experiencing. Avoid jargon. Max 30 words."),
+            user=(f"Customer's original issue: {raw!r}. Asset: {asset}. "
+                  "Ask what they are still experiencing so we can help further."),
+            fast=True,
+        )
+        question = (q or "").strip() or (
+            "We're sorry to hear the issue persists. Could you describe what you're still "
+            "experiencing so we can take further action?")
+        session.mem.set_blob("followup_question", question)
+        return question
+
     def _action_type(self, session, decision: dict[str, Any]) -> str:
         sel = decision.get("selected_action")
         for c in session.mem.get_candidates():

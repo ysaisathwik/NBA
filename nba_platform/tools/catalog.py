@@ -49,7 +49,7 @@ def build_registry(store: LongTermStore, sims: Simulators, domain=None) -> ToolR
     add("crm_update", "rest", "Update CRM ticket status",
         lambda ticket_id, status: sims.crm.update_ticket(ticket_id, status))
     add("notify", "rest", "Send customer / stakeholder notifications",
-        lambda audience, count=1: sims.comms.notify(audience, count))
+        lambda audience, count=1, channel="email", subject="", body="": sims.comms.notify(audience, count))
     add("automation_trigger", "rest", "Trigger a pre-built automation workflow",
         lambda workflow: sims.automation.trigger(workflow))
     add("asset_update", "supabase", "Update asset health record",

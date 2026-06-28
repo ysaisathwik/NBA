@@ -62,3 +62,17 @@ class VerificationAgent(Agent):
                 resolution_summary=f"Resolved via NBA platform; telemetry {value} ≤ {threshold}.")
         survey = self.use("customer_survey", customer_id=(ctx.get("customer_profile") or {}).get("id"))
         session.mem.set_state("csat_positive_pct", survey.get("positive_pct"))
+
+        # Composite CSAT: survey base, penalised for replans, bonus for fast human response.
+        intent = session.mem.get_state("intent", {}) or {}
+        iterations = session.mem.get_state("iteration", 0) or 0
+        response_time = (session.mem.get_blob("human_review", {}) or {}).get("response_time_ms", 0)
+        base = float(survey.get("positive_pct", 73)) / 100
+        iteration_penalty = 0.05 * iterations
+        speed_bonus = 0.05 if (response_time and response_time < 60000) else 0
+        csat = round(max(0.0, min(1.0, base - iteration_penalty + speed_bonus)), 3)
+        session.mem.set_state("csat_score", csat)
+        session.mem.set_state("csat_factors", {
+            "survey_positive_pct": survey.get("positive_pct"), "iterations": iterations,
+            "response_time_ms": response_time, "urgency": intent.get("urgency_tier", "P4"),
+        })

@@ -35,6 +35,9 @@ class SessionRunner:
         # iterative-feedback gate (supports multiple rounds → queue)
         self.feedback_q: "queue.Queue[dict[str, Any]]" = queue.Queue()
         self.awaiting_feedback = False
+        # engineer work-completion gate (Bug 2)
+        self.work_complete_event = threading.Event()
+        self.awaiting_work_update = False
 
     def provider(self, session: Session, package: dict[str, Any]) -> dict[str, Any]:
         self.awaiting = True
@@ -67,6 +70,21 @@ class SessionRunner:
     def submit_feedback(self, resolved: bool) -> None:
         self.feedback_q.put({"resolved": resolved})
 
+    def signal_work_complete(self) -> None:
+        self.work_complete_event.set()
+
+    def work_update_provider(self, session: Session) -> dict[str, Any]:
+        """Blocks until the engineer marks work complete/blocked, or times out (EC-07)."""
+        self.awaiting_work_update = True
+        got = self.work_complete_event.wait(timeout=7200)  # 2h
+        self.work_complete_event.clear()  # re-arm for any subsequent round
+        self.awaiting_work_update = False
+        if got:
+            return session.mem.get_blob("work_update") or {"status": "completed"}
+        session.log("Work update timeout",
+                    detail="no engineer update in 2h — proceeding with telemetry verification only")
+        return {"status": "timeout"}
+
 
 _runners: dict[str, SessionRunner] = {}
 
@@ -97,6 +115,13 @@ class DialogueIn(BaseModel):
 
 class FeedbackIn(BaseModel):
     resolved: bool = False
+
+
+class WorkUpdateIn(BaseModel):
+    work_order_id: str = ""
+    status: str = "completed"  # in_progress | completed | blocked
+    notes: str = ""
+    engineer_id: str = ""
 
 
 class LoginIn(BaseModel):
@@ -168,7 +193,8 @@ def _start(session: Session) -> SessionRunner:
     runner = SessionRunner(session)
     _runners[session.sid] = runner
     orch = Orchestrator(platform, decision_provider=runner.provider,
-                        feedback_provider=runner.feedback_provider)
+                        feedback_provider=runner.feedback_provider,
+                        work_update_provider=runner.work_update_provider)
     threading.Thread(target=orch.run_prepared, args=(session,), daemon=True).start()
     return runner
 
@@ -261,12 +287,18 @@ def get_session(sid: str, user: dict = Depends(require_auth)) -> dict[str, Any]:
     snap["state"] = session.state.value
     snap["awaiting_human"] = runner.awaiting
     snap["awaiting_feedback"] = runner.awaiting_feedback
+    snap["awaiting_work_update"] = runner.awaiting_work_update
     snap["review_package"] = session.mem.get_blob("review_package") if runner.awaiting else None
     # keep these live while the case is in flight (snapshot may be the pre-flush capture)
     if session.result is None:
         snap["followup_question"] = session.mem.get_blob("followup_question")
         snap["matched_agents"] = session.mem.get_state("matched_agents", [])
         snap["extracted_event"] = session.mem.get_blob("extracted_event")
+        snap["feedback_target"] = session.mem.get_state("feedback_target", "operator")
+        snap["work_update"] = session.mem.get_blob("work_update")
+        snap["work_status_update"] = session.mem.get_state("work_status_update")
+        snap["csat_score"] = session.mem.get_state("csat_score")
+        snap["csat_factors"] = session.mem.get_state("csat_factors")
     return snap
 
 
@@ -310,6 +342,42 @@ def submit_feedback(sid: str, payload: FeedbackIn, user: dict = Depends(require_
     if payload.resolved:
         _record_resolution_signal(runner.session)  # close the learning loop at the UI level
     return {"ok": True, "resolved": payload.resolved}
+
+
+@app.post("/api/sessions/{sid}/work-update")
+def submit_work_update(sid: str, payload: WorkUpdateIn, user: dict = Depends(require_auth)) -> dict[str, Any]:
+    """Field engineer submits a work status update. 'completed'/'blocked' unblock verification."""
+    if user["role"] not in {"engineer", "operator", "admin"}:
+        raise HTTPException(403, "Only engineers and operators can submit work updates")
+    runner = _runners.get(sid)
+    if not runner:
+        raise HTTPException(404, "session not found")
+
+    session = runner.session
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    session.mem.set_blob("work_update", {
+        "work_order_id": payload.work_order_id, "status": payload.status, "notes": payload.notes,
+        "engineer_id": user.get("id", payload.engineer_id), "engineer_name": user.get("name", ""),
+        "timestamp": now,
+    })
+    session.log("Engineer work update",
+                detail=f"WO {payload.work_order_id} → {payload.status} by {user.get('name', 'engineer')}",
+                data={"status": payload.status, "notes": payload.notes})
+
+    if payload.status == "in_progress":
+        # Feature 3: push a customer-facing ETA update.
+        exec_result = session.mem.get_blob("exec_result") or {}
+        remaining = max(5, int(exec_result.get("eta_min", 45)) // 2)
+        session.mem.set_state("work_status_update", {
+            "status": "in_progress", "engineer_name": user.get("name", "Our engineer"),
+            "remaining_eta_min": remaining, "notes": payload.notes, "updated_at": now})
+        session.log("Work in progress update", detail=f"~{remaining}min remaining")
+
+    if payload.status in {"completed", "blocked"}:
+        runner.signal_work_complete()  # advances the engineer gate
+
+    return {"ok": True, "status": payload.status, "session_id": sid}
 
 
 def _record_resolution_signal(session: Session) -> None:

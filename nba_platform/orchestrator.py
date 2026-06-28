@@ -15,6 +15,10 @@ from .schemas import CaseState, Event, HumanReview
 _REPLAN_LIMITS = {"P1": 3, "P2": 2, "P3": 1, "P4": 0}
 _VERIFY_WAIT = {"P1": 5, "P2": 15, "P3": 60, "P4": 240}
 
+# Actions that dispatch a field crew → gated on an engineer "work complete" update (API mode).
+FIELD_ACTIONS = {"emergency_fan_replacement", "isolation_reroute", "load_reduction_coolant",
+                 "cooling_boost_monitor", "dispatch_inspection", "schedule_maintenance"}
+
 DecisionProvider = Callable[[Session, dict[str, Any]], dict[str, Any]]
 FeedbackProvider = Callable[[Session], dict[str, Any]]
 
@@ -37,11 +41,13 @@ def default_reviewer(session: Session, package: dict[str, Any]) -> dict[str, Any
 
 class Orchestrator:
     def __init__(self, platform: Platform, decision_provider: DecisionProvider | None = None,
-                 feedback_provider: FeedbackProvider | None = None) -> None:
+                 feedback_provider: FeedbackProvider | None = None,
+                 work_update_provider: Callable[[Session], dict[str, Any]] | None = None) -> None:
         self.platform = platform
         self.decision_provider = decision_provider or default_reviewer
-        # Optional human feedback gate for the iterative resolution loop (API mode).
-        self.feedback_provider = feedback_provider
+        # Optional human gates for interactive (API) mode.
+        self.feedback_provider = feedback_provider          # customer resolution confirmation
+        self.work_update_provider = work_update_provider    # field-engineer work completion
 
     # ---------------------------------------------------------------- run
     def run(self, event: Event, goal: str | None = None) -> Session:
@@ -76,6 +82,17 @@ class Orchestrator:
         ev = session.event
         session.log("Event arrives", detail=f"{ev.type} · {ev.severity} · asset={ev.asset_id}", data=ev.model_dump())
         session.log("Ingestion & enrichment", detail="telemetry/context confirmed indexed")
+
+        # Feature 5: proactively alert the customer the instant a P1/P2 event is detected.
+        if ev.severity in {"CRITICAL", "MAJOR"} and ev.customer_id:
+            try:
+                msg = (f"We have detected an issue with {ev.asset_id or 'your service'} and our team is "
+                       f"already investigating. We will update you shortly. Reference: {session.sid[:8].upper()}")
+                self.platform.agent("notification").use(
+                    "notify", audience=f"customer:{ev.customer_id}", count=1, channel="sms", body=msg)
+                session.log("Proactive customer alert sent", detail=f"notified {ev.customer_id} of detection")
+            except Exception:
+                pass
 
         # 1) Context + Intent (critical pre-planning agents)
         ctx_res = self.platform.agent("context").run(session)
@@ -155,14 +172,47 @@ class Orchestrator:
         iteration = 0
 
         while True:
-            session.set_state(CaseState.VERIFYING)
-            session.log("Verification wait", detail=f"advancing T+{wait}min (urgency {urgency})")
-            session.advance_clock(wait)
+            # Engineer gate (Bug 2): for field work in API mode, wait for the engineer to confirm
+            # completion before running telemetry verification. A 'blocked' update → replan.
+            if self._needs_field_work(session) and not session.mem.get_state("work_confirmed"):
+                session.set_state(CaseState.EXECUTING)
+                session.log("Awaiting engineer work update",
+                            detail="verification runs after the engineer confirms completion")
+                wu = self.work_update_provider(session) or {}
+                session.log("Engineer update received",
+                            detail=f"status={wu.get('status')} {wu.get('notes', '')}", data=wu)
+                if wu.get("status") == "blocked":
+                    session.mem.set_state("work_blocked", True)
+                    session.log("Work blocked", detail=wu.get("notes", "Engineer reported a blocker"))
+                    verify = {"resolved": False, "reason": "Engineer reported work blocked"}
+                    session.mem.set_blob("verify", verify)
+                    if session.event.customer_id:
+                        try:
+                            self.platform.agent("notification").use(
+                                "notify", audience=f"customer:{session.event.customer_id}", count=1,
+                                channel="sms", body="There's a short delay resolving your issue; our team is on it.")
+                        except Exception:
+                            pass
+                else:
+                    session.mem.set_state("work_confirmed", True)
+                    session.set_state(CaseState.VERIFYING)
+                    session.advance_clock(wait)
+                    verify = self.platform.agent("verification").run(session).output
+            else:
+                session.set_state(CaseState.VERIFYING)
+                session.log("Verification wait", detail=f"advancing T+{wait}min (urgency {urgency})")
+                session.advance_clock(wait)
+                verify = self.platform.agent("verification").run(session).output
 
-            verify = self.platform.agent("verification").run(session).output
             if verify.get("resolved"):
                 session.set_state(CaseState.RESOLVED)
                 session.log("Resolution confirmed", detail=verify.get("reason"), data=verify.get("evidence"))
+                # Telemetry-confirmed resolution email (skipped if customer confirmation will run).
+                if not self.feedback_provider:
+                    try:
+                        self.platform.agent("notification").send_resolution_email(session)
+                    except Exception:
+                        pass
                 return
             if verify.get("partial_resolve"):
                 session.set_state(CaseState.PARTIAL_RESOLVE)
@@ -219,13 +269,22 @@ class Orchestrator:
         session.set_state(CaseState.EXECUTING)
         self.platform.agent("execution").run(session)
 
+    def _needs_field_work(self, session: Session) -> bool:
+        """True when a field crew was dispatched and we should wait for an engineer update."""
+        if not self.work_update_provider:
+            return False
+        review = session.mem.get_blob("human_review", {}) or {}
+        candidates = session.mem.get_candidates()
+        action = next((c for c in candidates if c["id"] == review.get("selected_action")),
+                      candidates[0] if candidates else {})
+        return action.get("action_type") in FIELD_ACTIONS
+
     # ------------------------------------------------- interactive feedback
     def _interactive_feedback(self, session: Session, review: dict[str, Any]) -> None:
-        """Dynamic iterative confirmation loop driven by human yes/no feedback (API mode).
+        """Iterative resolution confirmation driven by the CUSTOMER (Bug 1), in API mode.
 
-        Hooks in AFTER the goal loop. The operator confirms resolution or reports a persistent
-        issue; each "No" triggers a replan + a more specific LLM follow-up question, bounded by
-        the urgency replan limit.
+        Hooks in AFTER the goal loop. The customer confirms resolution or reports a persistent
+        issue; each "No" triggers a replan + a more specific, customer-friendly question.
         """
         if not self.feedback_provider or review.get("auto_approved"):
             return
@@ -233,32 +292,39 @@ class Orchestrator:
         urgency = intent.get("urgency_tier", "P4")
         max_loops = max(_REPLAN_LIMITS.get(urgency, 0), 2)
 
+        # The pending question is FOR THE CUSTOMER.
+        session.mem.set_state("feedback_target", "customer")
         if not session.mem.get_blob("followup_question"):
-            self.platform.agent("hitl").generate_followup(session, review)
+            self.platform.agent("hitl").generate_customer_followup(session, review)
 
         loops = 0
         while True:
             session.set_state(CaseState.VERIFYING)
-            session.log("Awaiting operator feedback", detail=session.mem.get_blob("followup_question"))
+            session.log("Awaiting customer confirmation",
+                        detail=session.mem.get_blob("followup_question"), data={"target": "customer"})
             fb = self.feedback_provider(session) or {}
             if fb.get("resolved"):
                 session.set_state(CaseState.RESOLVED)
-                session.log("Operator confirmed resolution", detail="case marked resolved by human feedback")
+                session.log("Customer confirmed resolution", detail="case closed by customer confirmation")
+                try:
+                    self.platform.agent("notification").send_resolution_email(session)
+                except Exception:
+                    pass
                 return
             loops += 1
             if loops > max_loops:
                 session.set_state(CaseState.ESCALATED)
-                session.log("Feedback loop limit reached",
-                            detail=f"escalating after {loops - 1} unresolved confirmations")
+                session.log("Customer feedback loop limit",
+                            detail=f"escalating after {loops - 1} unresolved confirmations from customer")
                 return
             session.set_state(CaseState.REPLANNING)
             rp = self.platform.agent("planner").replan(session, {"resolved": False})
-            session.log(f"Operator reports unresolved (iteration {loops})", detail=rp.get("reason"), data=rp)
+            session.log(f"Customer reports issue persists (loop {loops})", detail=rp.get("reason"))
             self._escalate_action(session)
             session.advance_clock(_VERIFY_WAIT.get(urgency, 5))
             self.platform.agent("verification").run(session)
-            q = self.platform.agent("hitl").generate_specific_followup(session, review)
-            session.log("Follow-up question", detail=q)
+            q = self.platform.agent("hitl").generate_specific_customer_followup(session, review)
+            session.log("Customer follow-up question", detail=q)
 
     # ----------------------------------------------------- post-resolution
     def _compress_and_learn(self, session: Session) -> None:

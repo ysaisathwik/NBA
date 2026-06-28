@@ -16,6 +16,7 @@ from .execution import ExecutionAgent
 from .verification import VerificationAgent
 from .compression import MemoryCompressionAgent
 from .learning import LearningAgent
+from .notification import NotificationAgent
 
 AGENT_CLASSES = {
     "dialogue_parser": DialogueParserAgent,
@@ -32,6 +33,7 @@ AGENT_CLASSES = {
     "verification": VerificationAgent,
     "compression": MemoryCompressionAgent,
     "learning": LearningAgent,
+    "notification": NotificationAgent,
 }
 
 

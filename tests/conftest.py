@@ -1,6 +1,8 @@
 import os
 
 os.environ.setdefault("NBA_FORCE_OFFLINE", "1")  # deterministic tests, no network
+os.environ["SUPABASE_URL"] = ""                   # force SQLite store in tests (no network)
+os.environ["SUPABASE_KEY"] = ""
 
 import pytest
 

@@ -82,28 +82,72 @@ def test_operator_cannot_approve_p1_but_manager_can():
     c = client()
     op = auth(c, "operator@energy.com", "operator123")
     mgr = auth(c, "manager@energy.com", "manager123")
+    eng = auth(c, "engineer@energy.com", "engineer123")
     transformer = c.get("/api/scenarios").json()[0]["event"]
     sid = c.post("/api/events", json=transformer, headers=op).json()["session_id"]
 
     snap = _wait(c, sid, op, lambda s: s.get("awaiting_human"))
     assert snap.get("required_role") == "manager"
+    # proactive alert (Feature 5) fired for this P1 case
+    assert any("Proactive customer alert" in s["title"] for s in snap["trace"])
     top = snap["candidates"][0]["id"]
 
     # operator is below the required tier for a P1 → 403
     r = c.post(f"/api/sessions/{sid}/decision", headers=op,
                json={"decision": "approved", "selected_action": top})
     assert r.status_code == 403
-
     # manager has authority → 200
     r = c.post(f"/api/sessions/{sid}/decision", headers=mgr,
                json={"decision": "approved", "selected_action": top})
     assert r.status_code == 200 and r.json()["role"] == "manager"
 
+    # Bug 2: engineer gate — verification waits for a work update
+    snap = _wait(c, sid, eng, lambda s: s.get("awaiting_work_update"))
+    assert snap.get("awaiting_work_update") is True
+    wo = (snap.get("exec_result") or {}).get("work_order_id", "")
+    r = c.post(f"/api/sessions/{sid}/work-update", headers=eng,
+               json={"work_order_id": wo, "status": "completed", "notes": "fan replaced"})
+    assert r.json()["ok"] is True
+
+    # Bug 1: the resolution question targets the CUSTOMER
     snap = _wait(c, sid, mgr, lambda s: s.get("awaiting_feedback"))
     assert snap.get("followup_question")
+    assert snap.get("feedback_target") == "customer"
     c.post(f"/api/sessions/{sid}/feedback", json={"resolved": True}, headers=mgr)
     final = _wait(c, sid, mgr, lambda s: s.get("state") == "CLOSED")
     assert final["state"] == "CLOSED"
+    # Feature 1: a resolution email was sent; Feature 2: CSAT recorded
+    assert any("Resolution email sent" in s["title"] for s in final["trace"])
+    assert final.get("csat_score") is not None
+
+
+def test_work_update_role_enforcement():
+    c = client()
+    cust = auth(c, "customer@energy.com", "customer123")
+    mgr = auth(c, "manager@energy.com", "manager123")
+    op = auth(c, "operator@energy.com", "operator123")
+    sid = c.post("/api/events", json=c.get("/api/scenarios").json()[0]["event"], headers=op).json()["session_id"]
+    # customer and manager cannot submit work updates
+    assert c.post(f"/api/sessions/{sid}/work-update", headers=cust, json={"status": "completed"}).status_code == 403
+    assert c.post(f"/api/sessions/{sid}/work-update", headers=mgr, json={"status": "completed"}).status_code == 403
+
+
+def test_engineer_blocked_then_completed():
+    c = client()
+    mgr = auth(c, "manager@energy.com", "manager123")
+    eng = auth(c, "engineer@energy.com", "engineer123")
+    sid = c.post("/api/events", json=c.get("/api/scenarios").json()[0]["event"], headers=mgr).json()["session_id"]
+    snap = _wait(c, sid, mgr, lambda s: s.get("awaiting_human"))
+    c.post(f"/api/sessions/{sid}/decision", headers=mgr,
+           json={"decision": "approved", "selected_action": snap["candidates"][0]["id"]})
+    snap = _wait(c, sid, eng, lambda s: s.get("awaiting_work_update"))
+    wo = (snap.get("exec_result") or {}).get("work_order_id", "")
+    # engineer reports a blocker → replan, then completes
+    c.post(f"/api/sessions/{sid}/work-update", headers=eng, json={"work_order_id": wo, "status": "blocked", "notes": "no parts"})
+    snap = _wait(c, sid, eng, lambda s: s.get("awaiting_work_update"))  # gate re-armed after replan
+    c.post(f"/api/sessions/{sid}/work-update", headers=eng, json={"work_order_id": wo, "status": "completed"})
+    snap = _wait(c, sid, mgr, lambda s: s.get("awaiting_feedback") or s.get("state") in {"ESCALATED", "CLOSED"})
+    assert any("Work blocked" in s["title"] for s in snap["trace"])
 
 
 def test_p4_billing_auto_approves_without_human():

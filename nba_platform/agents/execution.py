@@ -82,5 +82,18 @@ class ExecutionAgent(Agent):
                      payload={"action_type": action_type, "modifications": modifications})
 
         session.mem.set_blob("exec_result", result.model_dump())
+
+        # Customer + engineer notifications (non-critical; never block execution).
+        if result.success:
+            try:
+                self.platform.agent("notification").send_work_assigned_email(session)
+            except Exception:
+                pass
+            if result.crew_assignment_id:
+                try:
+                    self.platform.agent("notification").send_engineer_assigned_notification(
+                        session, engineer_name=result.crew_assignment_id)
+                except Exception:
+                    pass
         self._confidence = 0.95 if result.success else 0.2
         return {"executed": result.success, "work_order": result.work_order_id, "ops": len(result.operations)}

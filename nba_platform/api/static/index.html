@@ -87,6 +87,12 @@
   .empty { color:var(--muted); text-align:center; padding:18px; font-size:13px; }
   .progress { display:flex; gap:4px; margin-top:6px; } .progress div{flex:1;height:6px;border-radius:3px;background:#21262d;}
   .copybtn { background:none; border:none; cursor:pointer; padding:2px 4px; font-size:12px; }
+  /* customer timeline (novelty) */
+  .timeline-step { display:flex; align-items:center; gap:10px; padding:7px 0; opacity:0.35; transition:opacity .3s; }
+  .timeline-step.past { opacity:0.65; } .timeline-step.current { opacity:1; font-weight:600; }
+  .timeline-icon { font-size:18px; width:28px; text-align:center; } .timeline-label { font-size:13px; }
+  .pulse-dot { width:8px; height:8px; border-radius:50%; background:var(--blue); animation:pulse 1.5s infinite; margin-left:6px; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.4;transform:scale(1.4);} }
 </style>
 </head>
 <body>
@@ -279,16 +285,23 @@ function renderAnalytics(s){ const el=document.getElementById('analytics'); if(!
   el.innerHTML = `<table><tr><th>ID</th><th>State</th><th>Urgency</th></tr>`+
     s.map(x=>`<tr><td><code>${x.session_id.slice(-6)}</code></td><td>${fmtState(x.state)}</td><td>${x.urgency||'-'}</td></tr>`).join('')+`</table>`;
 }
+const SEV_RANK={CRITICAL:0,MAJOR:1,WARNING:2,INFO:3};
 async function renderWorkOrders(s){ const el=document.getElementById('workorders'); if(!el)return;
   const rows=[];
   for (const x of s.filter(c=>['EXECUTING','VERIFYING','RESOLVED','CLOSED','REPLANNING'].includes(c.state))) {
     const snap = await apiJSON('/api/sessions/'+x.session_id);
     const ex = snap.exec_result||{};
-    if (ex.work_order_id) rows.push({sid:x.session_id, wo:ex.work_order_id, asset:snap.event&&snap.event.asset_id, state:x.state});
+    if (ex.work_order_id) rows.push({sid:x.session_id, wo:ex.work_order_id, asset:snap.event&&snap.event.asset_id,
+      state:x.state, severity:(snap.event&&snap.event.severity)||'INFO',
+      needsUpdate:snap.awaiting_work_update, blocked:(snap.work_update||{}).status==='blocked'});
   }
+  // Feature 4: blocked first, then by severity, then needs-update.
+  rows.sort((a,b)=> (b.blocked-a.blocked) || (SEV_RANK[a.severity]-SEV_RANK[b.severity]) || (b.needsUpdate-a.needsUpdate));
   el.innerHTML = rows.length ? `<table><tr><th>Work order</th><th>Asset</th><th>State</th><th></th></tr>`+
-    rows.map(r=>`<tr><td><code>${r.wo}</code></td><td>${r.asset||'-'}</td><td>${fmtState(r.state)}</td>
-      <td><button onclick="openCase('${r.sid}')">Open</button></td></tr>`).join('')+`</table>`
+    rows.map(r=>`<tr><td><code>${r.wo}</code>${SEV_RANK[r.severity]<=1?' <span class="badge b-red">URGENT</span>':''}
+      ${r.blocked?'<span class="badge b-red">BLOCKED</span>':''}${r.needsUpdate?'<span class="badge b-amber">NEEDS UPDATE</span>':''}</td>
+      <td>${r.asset||'-'}</td><td>${fmtState(r.state)}</td>
+      <td><button class="${r.needsUpdate?'primary':''}" onclick="openCase('${r.sid}')">Open</button></td></tr>`).join('')+`</table>`
     : '<div class="empty">No work orders assigned.</div>';
 }
 function renderAssets(){ const el=document.getElementById('assets'); if(!el)return;
@@ -336,12 +349,23 @@ async function renderDetail() {
       <div class="relbar"><i style="width:${Math.round(r*100)}%;background:${col}"></i></div></div>`;
   }
 
-  // customer status tracker
+  // customer status tracker — friendly timeline + ETA + CSAT
   if (ME.role==='customer') {
-    const order=['INITIATED','CONTEXT_LOADED','EXECUTING','VERIFYING','RESOLVED','CLOSED'];
-    const idx=Math.max(order.indexOf(snap.state),0);
-    html += `<div class="progress">`+order.map((s,i)=>`<div style="background:${i<=idx?'var(--green)':'#21262d'}"></div>`).join('')+`</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">${snap.state}</div>`;
+    // Feature 3: live ETA while engineer on site
+    const ws=snap.work_status_update;
+    if (ws && snap.state==='EXECUTING') {
+      html += `<div class="badge b-blue" style="margin:6px 0">🔧 ${ws.engineer_name} on site — ~${ws.remaining_eta_min} min remaining</div>`;
+    }
+    // Novelty: human-readable timeline
+    html += `<div style="margin:8px 0">`+renderCustomerTimeline(snap.state)+`</div>`;
+    // Feature 2: CSAT after resolution
+    if (['RESOLVED','CLOSED'].includes(snap.state) && snap.csat_score!=null) {
+      const pct=Math.round(snap.csat_score*100), stars=Math.round(snap.csat_score*5);
+      html += `<div class="rec" style="border-color:var(--green)"><h3><span>✅ Issue resolved</span></h3>
+        <div>Your satisfaction score: <b>${'★'.repeat(stars)}${'☆'.repeat(5-stars)}</b> (${pct}%)</div>
+        ${snap.csat_factors?`<div class="desc">Resolved after ${snap.csat_factors.iterations} iteration(s) · ${snap.csat_factors.urgency}</div>`:''}
+        <div class="desc">Thank you for your patience.</div></div>`;
+    }
   } else {
     // live trace (animated)
     html += `<div style="margin:8px 0;max-height:30vh;overflow:auto">`+
@@ -394,10 +418,30 @@ function renderReco(snap) {
     } else {
       html += `<div class="badge b-amber" style="margin-top:8px">Awaiting <b>${req||'operator'}</b> approval — your role (${ME.role}) cannot approve this ${snap.routing?'('+(snap.routing.reason||'')+')':''}</div>`;
     }
+  } else if (snap.awaiting_work_update) {
+    // Bug 2: field-engineer work-completion gate.
+    if (['engineer','operator','admin'].includes(ME.role)) {
+      const wo=(snap.exec_result||{}).work_order_id||'';
+      html += `<div class="bubble"><div class="who">Work order ${wo}</div>
+        <div>Confirm field work status for this case.</div></div>
+        <textarea id="wnotes" rows="2" placeholder="Notes (optional)…" style="margin:8px 0"></textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="green" onclick="workUpdate('${wo}','completed')">✓ Mark complete</button>
+          <button class="primary" onclick="workUpdate('${wo}','in_progress')">⟳ In progress</button>
+          <button class="red" onclick="workUpdate('${wo}','blocked')">⚠ Report blocker</button></div>`;
+    } else {
+      html += `<div class="badge b-blue" style="margin-top:8px">🔧 Engineer dispatched — awaiting field completion…</div>`;
+    }
   } else if (snap.awaiting_feedback && snap.followup_question) {
-    html += `<div class="bubble"><div class="who">NBA assistant</div><div>${snap.followup_question}</div></div>
-      <div style="display:flex;gap:8px"><button class="green" onclick="feedback(true)">Yes, resolved</button>
-      <button class="red" onclick="feedback(false)">No, still an issue</button></div>`;
+    // Bug 1: the resolution question is FOR THE CUSTOMER only.
+    if (ME.role==='customer' || snap.feedback_target!=='customer') {
+      html += `<div class="bubble"><div class="who">NBA assistant</div><div>${snap.followup_question}</div></div>
+        <div style="display:flex;gap:8px"><button class="green" onclick="feedback(true)">Yes, resolved ✓</button>
+        <button class="red" onclick="feedback(false)">No, still an issue ✗</button></div>`;
+    } else {
+      html += `<div class="badge b-amber" style="margin-top:8px">⏳ Awaiting customer confirmation…</div>
+        <div class="bubble" style="opacity:.7"><div class="who">Question sent to customer</div><div>${snap.followup_question}</div></div>`;
+    }
   } else if (review.decision && review.decision!=='pending') {
     const v=snap.verify||{};
     html += `<div class="badge ${review.decision==='rejected'?'b-red':'b-green'}" style="margin-top:8px">
@@ -416,6 +460,31 @@ async function decide(decision){
 }
 async function feedback(resolved){
   await api('/api/sessions/'+CURSID+'/feedback',{method:'POST',body:JSON.stringify({resolved})});
+  renderDetail();
+}
+// Novelty: customer-friendly milestone timeline
+const CUSTOMER_TIMELINE = {
+  INITIATED:{label:"Issue received",icon:"📥"}, CONTEXT_LOADED:{label:"Reviewing your account",icon:"🔍"},
+  PLAN_CREATED:{label:"Diagnosing the problem",icon:"🧠"}, AGENTS_RUNNING:{label:"Running diagnostics",icon:"⚡"},
+  RECOMMENDATION_READY:{label:"Solution identified",icon:"💡"}, HUMAN_REVIEW:{label:"Approval in progress",icon:"✋"},
+  EXECUTING:{label:"Engineer dispatched",icon:"🔧"}, VERIFYING:{label:"Confirming the fix",icon:"🔎"},
+  PARTIAL_RESOLVE:{label:"Partially resolved",icon:"⚠️"}, ESCALATED:{label:"Escalated to senior team",icon:"📞"},
+  RESOLVED:{label:"Issue resolved",icon:"✅"}, CLOSED:{label:"Case closed",icon:"🔒"},
+};
+function renderCustomerTimeline(state){
+  const states=Object.keys(CUSTOMER_TIMELINE);
+  const idx=states.indexOf(state);
+  return states.map((s,i)=>{ const step=CUSTOMER_TIMELINE[s];
+    const past=i<idx, cur=i===idx;
+    return `<div class="timeline-step ${past?'past':''} ${cur?'current':''}">
+      <span class="timeline-icon">${step.icon}</span><span class="timeline-label">${step.label}</span>
+      ${cur?'<span class="pulse-dot"></span>':''}</div>`;}).join('');
+}
+
+async function workUpdate(wo, status){
+  const notes=(document.getElementById('wnotes')||{}).value||'';
+  const r=await api('/api/sessions/'+CURSID+'/work-update',{method:'POST',body:JSON.stringify({work_order_id:wo,status,notes})});
+  if (r.status===403){ alert((await r.json()).detail); return; }
   renderDetail();
 }
 
