@@ -67,6 +67,11 @@ class HITLAgent(Agent):
         """
         from ..auth import AUTO_APPROVE_ROLES
 
+        # In API/interactive mode, Gate 1 ALWAYS requires a real human. Auto-approve exists only
+        # for offline demo runs (no feedback/work providers wired).
+        if session.mem.get_state("interactive_mode"):
+            return False
+
         s = self.platform.settings
         intent = session.mem.get_state("intent", {}) or {}
         primary = intent.get("primary_intent", "")

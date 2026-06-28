@@ -5,6 +5,10 @@ explanations, the human decision, the goal-loop replan, and the memory/learning 
 """
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("NBA_FORCE_OFFLINE", "1")  # works with zero setup (no API key needed)
+
 import sys
 
 try:  # ensure unicode renders on Windows consoles
@@ -76,7 +80,7 @@ def run_case(platform: Platform, event: Event, title: str):
 
 
 def main() -> None:
-    settings = Settings(db_path=":memory:")
+    settings = Settings(db_path=":memory:", supabase_url="", supabase_key="")  # local, no network
     platform = Platform(settings=settings)
     print(f"{C['d']}LLM mode: {'Claude (live)' if platform.llm.available else 'deterministic offline fallback'}{C['x']}")
 

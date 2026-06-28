@@ -93,6 +93,15 @@
   .timeline-icon { font-size:18px; width:28px; text-align:center; } .timeline-label { font-size:13px; }
   .pulse-dot { width:8px; height:8px; border-radius:50%; background:var(--blue); animation:pulse 1.5s infinite; margin-left:6px; }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:.4;transform:scale(1.4);} }
+  /* gate status bar */
+  .gatebar { display:flex; align-items:stretch; gap:6px; margin:4px 0 12px; }
+  .gate { flex:1; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .gate-h { font-size:12px; font-weight:600; } .gate-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+  .gate-arrow { align-self:center; color:var(--muted); }
+  .gate-done { border-color:var(--green); background:rgba(63,185,80,.08); } .gate-done .gate-h{color:var(--green);}
+  .gate-active { border-color:var(--amber); background:rgba(210,153,34,.08); animation:pulse 1.8s infinite; } .gate-active .gate-h{color:var(--amber);}
+  .gate-pending { opacity:.55; }
+  .stars { font-size:24px; cursor:pointer; user-select:none; } .stars span:hover { opacity:.7; }
 </style>
 </head>
 <body>
@@ -341,6 +350,9 @@ async function renderDetail() {
     <button class="copybtn" title="copy session id" onclick="copySid()">📋</button></div>
     <span style="color:var(--muted);font-size:12px">cost $${(snap.total_cost_usd||0).toFixed(5)}</span></div>`;
 
+  // command & confirmation chain (operator/manager/engineer view)
+  if (ME.role!=='customer') html += gateBar(snap);
+
   // relevance indicator
   if (snap.relevance_score!=null) {
     const r=snap.relevance_score, col=r<0.3?'var(--red)':r<0.7?'var(--amber)':'var(--green)';
@@ -419,23 +431,30 @@ function renderReco(snap) {
       html += `<div class="badge b-amber" style="margin-top:8px">Awaiting <b>${req||'operator'}</b> approval — your role (${ME.role}) cannot approve this ${snap.routing?'('+(snap.routing.reason||'')+')':''}</div>`;
     }
   } else if (snap.awaiting_work_update) {
-    // Bug 2: field-engineer work-completion gate.
-    if (['engineer','operator','admin'].includes(ME.role)) {
-      const wo=(snap.exec_result||{}).work_order_id||'';
-      html += `<div class="bubble"><div class="who">Work order ${wo}</div>
-        <div>Confirm field work status for this case.</div></div>
-        <textarea id="wnotes" rows="2" placeholder="Notes (optional)…" style="margin:8px 0"></textarea>
+    // Gate 2: the assigned worker (engineer for field, operator for processing) confirms.
+    const t=snap.gate2_task||{}; const wr=t.worker_role||'engineer'; const isField=t.is_field!==false;
+    const wo=t.work_order_id||(snap.exec_result||{}).work_order_id||'';
+    const canDo = ME.role==='admin' || ME.role===wr;
+    if (canDo) {
+      html += `<div class="bubble"><div class="who">${isField?'🔧 Task assigned to you':'📋 Processing task'}</div>
+        <div>${t.task_label||'Confirm work completion'}</div>
+        <div class="pill">Work order ${wo}</div></div>
+        <textarea id="wnotes" rows="2" placeholder="Notes (required, min 10 chars)…" style="margin:8px 0"></textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="green" onclick="workUpdate('${wo}','completed')">✓ Mark complete</button>
-          <button class="primary" onclick="workUpdate('${wo}','in_progress')">⟳ In progress</button>
-          <button class="red" onclick="workUpdate('${wo}','blocked')">⚠ Report blocker</button></div>`;
+          <button class="green" onclick="workUpdate('${wo}','completed')">${isField?'✓ Mark complete':'✓ Adjustment issued'}</button>
+          ${isField?`<button class="primary" onclick="workUpdate('${wo}','in_progress')">⟳ In progress</button>`:''}
+          <button class="red" onclick="workUpdate('${wo}','blocked')">⚠ ${isField?'Report blocker':'Cannot process'}</button></div>`;
     } else {
-      html += `<div class="badge b-blue" style="margin-top:8px">🔧 Engineer dispatched — awaiting field completion…</div>`;
+      html += `<div class="badge b-blue" style="margin-top:8px">🔧 Awaiting ${wr} confirmation…</div>`;
     }
   } else if (snap.awaiting_feedback && snap.followup_question) {
-    // Bug 1: the resolution question is FOR THE CUSTOMER only.
+    // Gate 3: the resolution question is FOR THE CUSTOMER only.
     if (ME.role==='customer' || snap.feedback_target!=='customer') {
-      html += `<div class="bubble"><div class="who">NBA assistant</div><div>${snap.followup_question}</div></div>
+      const showToCustomer = ME.role==='customer';
+      html += (showToCustomer && snap.work_notes_for_customer
+                ? `<div class="pill" style="margin-bottom:6px">What we did: "${snap.work_notes_for_customer}"</div>` : '')
+        + `<div class="bubble"><div class="who">NBA assistant</div><div>${snap.followup_question}</div></div>
+        <textarea id="fbcomment" rows="2" placeholder="Your comments (optional)…" style="margin:8px 0"></textarea>
         <div style="display:flex;gap:8px"><button class="green" onclick="feedback(true)">Yes, resolved ✓</button>
         <button class="red" onclick="feedback(false)">No, still an issue ✗</button></div>`;
     } else {
@@ -447,6 +466,11 @@ function renderReco(snap) {
     html += `<div class="badge ${review.decision==='rejected'?'b-red':'b-green'}" style="margin-top:8px">
       ${review.decision}${review.auto_approved?' (auto)':''}${review.approved_by_name?(' · by '+review.approved_by_name):''}</div>
       ${v.resolved!==undefined?`<div style="font-size:12px;color:var(--muted);margin-top:6px">Verification: ${v.resolved?'✓ resolved':(v.partial_resolve?'~ partial':'✗ not resolved')}</div>`:''}`;
+    // Gate 3 closed: let the customer leave a star rating.
+    if (ME.role==='customer' && snap.customer_confirmed_resolution && snap.csat_score==null) {
+      html += `<div style="margin-top:10px">Rate your experience: <span class="stars" id="stars">
+        ${[1,2,3,4,5].map(n=>`<span onclick="submitCsat(${n})">☆</span>`).join('')}</span></div>`;
+    }
   }
   return html;
 }
@@ -454,14 +478,43 @@ function renderReco(snap) {
 function pick(sid,id){ window._sel[sid]=id; renderDetail(); }
 async function decide(decision){
   const mod=(document.getElementById('mod')||{}).value||'';
+  if (decision!=='rejected') {
+    const sel=window._sel[CURSID];
+    if (!confirm(`You are authorising this action. This will dispatch crew / processing and cannot be undone. Confirm?`)) return;
+  }
   const r=await api('/api/sessions/'+CURSID+'/decision',{method:'POST',body:JSON.stringify({decision,selected_action:window._sel[CURSID],modifications:mod?[mod]:[],comments:mod})});
   if (r.status===403){ alert((await r.json()).detail); return; }
   renderDetail();
 }
 async function feedback(resolved){
-  await api('/api/sessions/'+CURSID+'/feedback',{method:'POST',body:JSON.stringify({resolved})});
+  const comment=(document.getElementById('fbcomment')||{}).value||'';
+  await api('/api/sessions/'+CURSID+'/feedback',{method:'POST',body:JSON.stringify({resolved,comment})});
   renderDetail();
 }
+async function submitCsat(score){
+  await api('/api/sessions/'+CURSID+'/csat',{method:'POST',body:JSON.stringify({score})});
+  renderDetail();
+}
+// Command & confirmation gate chain (Gate 1 → Gate 2 → Gate 3)
+function gateBar(snap){
+  const hr=snap.human_review||{};
+  const g1done = hr.decision && hr.decision!=='pending' && (hr.approved_by_name || hr.auto_approved);
+  const g2done = snap.work_confirmed===true;
+  const g2active = snap.awaiting_work_update===true;
+  const g3active = snap.awaiting_feedback===true && snap.feedback_target==='customer';
+  const g3done = snap.customer_confirmed_resolution===true;
+  const cell=(icon,label,sub,done,active)=>{
+    const cls=done?'gate-done':active?'gate-active':'gate-pending';
+    return `<div class="gate ${cls}"><div class="gate-h">${done?'✓':active?'⏳':'○'} ${icon} ${label}</div><div class="gate-sub">${sub}</div></div>`;
+  };
+  const g1sub=g1done?(hr.approved_by_name?`${hr.approved_by_name}${hr.approved_by_role?', '+hr.approved_by_role:''}`:'auto-approved'):(snap.awaiting_human?`needs ${snap.required_role||'operator'}`:'pending');
+  const g2sub=g2done?`done${snap.work_confirmed_by?' · '+snap.work_confirmed_by:''}`:(g2active?`awaiting ${(snap.gate2_task||{}).worker_role||'worker'}`:'not yet');
+  const g3sub=g3done?'customer confirmed':(g3active?'awaiting customer':'not yet');
+  return `<div class="gatebar">${cell('⚡','Gate 1: Authorise',g1sub,g1done,snap.awaiting_human)}
+    <div class="gate-arrow">→</div>${cell('🔧','Gate 2: Work done',g2sub,g2done,g2active)}
+    <div class="gate-arrow">→</div>${cell('✅','Gate 3: Customer',g3sub,g3done,g3active)}</div>`;
+}
+
 // Novelty: customer-friendly milestone timeline
 const CUSTOMER_TIMELINE = {
   INITIATED:{label:"Issue received",icon:"📥"}, CONTEXT_LOADED:{label:"Reviewing your account",icon:"🔍"},
@@ -483,6 +536,8 @@ function renderCustomerTimeline(state){
 
 async function workUpdate(wo, status){
   const notes=(document.getElementById('wnotes')||{}).value||'';
+  if (status!=='blocked' && notes.trim().length<10){ alert('Please add completion notes (at least 10 characters).'); return; }
+  if (status==='blocked' && !notes.trim()){ alert('Please describe the blocker.'); return; }
   const r=await api('/api/sessions/'+CURSID+'/work-update',{method:'POST',body:JSON.stringify({work_order_id:wo,status,notes})});
   if (r.status===403){ alert((await r.json()).detail); return; }
   renderDetail();

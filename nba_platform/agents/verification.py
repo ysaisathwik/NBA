@@ -18,10 +18,18 @@ class VerificationAgent(Agent):
         reading = self.use("scada_telemetry", sim=sim) or {}
         value = reading.get("value")
         threshold = reading.get("threshold")
-        telemetry_ok = (value is not None and threshold is not None and value <= threshold)
-        # for non-telemetry events (no threshold), treat execution success as technical fix
-        if threshold is None:
-            telemetry_ok = bool(exec_result.get("success"))
+
+        # Non-telemetry events (billing, complaint, callback) carry no metric/threshold on the
+        # ORIGINAL event — the sim injects a default threshold, so detect from the event itself.
+        e = session.event
+        non_telemetry = e.threshold is None and e.value is None and e.metric is None
+        if non_telemetry:
+            # Execution success only means a work order was created — NOT that the customer's
+            # problem is solved. Force gate 3 (customer confirmation).
+            telemetry_ok = False
+            value = threshold = None
+        else:
+            telemetry_ok = value is not None and threshold is not None and value <= threshold
 
         ticket_ok = bool(exec_result.get("work_order_id"))
 
@@ -40,13 +48,18 @@ class VerificationAgent(Agent):
 
         resolved = bool(telemetry_ok and ticket_ok)
         partial = bool(telemetry_ok and not customer_ok)
+        reason = ("all sources confirm" if resolved else
+                  f"telemetry {value} vs threshold {threshold}; not yet normalised" if not telemetry_ok else
+                  "customer impact persists")
+        if non_telemetry:
+            # Always route to the customer for confirmation; never auto-resolve.
+            resolved = False
+            partial = True
+            reason = "non-telemetry event — awaiting customer confirmation"
 
         result = VerifyResult(
             resolved=resolved and not partial, partial_resolve=partial, evidence=evidence,
-            confidence=0.9 if resolved else 0.5,
-            reason=("all sources confirm" if resolved else
-                    f"telemetry {value} vs threshold {threshold}; not yet normalised" if not telemetry_ok else
-                    "customer impact persists"),
+            confidence=0.9 if resolved else 0.5, reason=reason,
         )
 
         if result.resolved:

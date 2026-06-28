@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -18,6 +19,24 @@ from ..runtime import Platform, Session
 from ..schemas import Event, HumanReview
 
 app = FastAPI(title="Intelligent NBA Platform", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # tighten to your domain in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+def health() -> dict:
+    return {
+        "status": "ok",
+        "llm": "live" if platform.llm.available else "offline",
+        "store": "supabase" if platform.settings.supabase_configured else "sqlite",
+        "sessions_active": len(_runners),
+    }
 
 # One in-process platform (in-memory store, re-seeded on boot) shared by all requests.
 platform = Platform(settings=Settings(db_path=":memory:"))
@@ -67,8 +86,8 @@ class SessionRunner:
         self.awaiting_feedback = False
         return fb
 
-    def submit_feedback(self, resolved: bool) -> None:
-        self.feedback_q.put({"resolved": resolved})
+    def submit_feedback(self, resolved: bool, comment: str = "") -> None:
+        self.feedback_q.put({"resolved": resolved, "comment": comment})
 
     def signal_work_complete(self) -> None:
         self.work_complete_event.set()
@@ -115,6 +134,11 @@ class DialogueIn(BaseModel):
 
 class FeedbackIn(BaseModel):
     resolved: bool = False
+    comment: str = ""
+
+
+class CsatIn(BaseModel):
+    score: int = 5
 
 
 class WorkUpdateIn(BaseModel):
@@ -192,6 +216,7 @@ def scenarios() -> list[dict[str, Any]]:
 def _start(session: Session) -> SessionRunner:
     runner = SessionRunner(session)
     _runners[session.sid] = runner
+    session.mem.set_state("interactive_mode", True)  # Gate 1 always needs a real human in API mode
     orch = Orchestrator(platform, decision_provider=runner.provider,
                         feedback_provider=runner.feedback_provider,
                         work_update_provider=runner.work_update_provider)
@@ -255,6 +280,7 @@ def list_sessions(user: dict = Depends(require_role("operator", "manager", "admi
         intent = r.session.mem.get_state("intent", {}) or {}
         out.append({"session_id": sid, "state": r.session.state.value,
                     "awaiting_human": r.awaiting, "awaiting_feedback": r.awaiting_feedback,
+                    "awaiting_work_update": r.awaiting_work_update,
                     "urgency": intent.get("urgency_tier"),
                     "required_role": r.session.mem.get_state("required_role"),
                     "event": r.session.event.model_dump(mode="json")})
@@ -301,6 +327,12 @@ def get_session(sid: str, user: dict = Depends(require_auth)) -> dict[str, Any]:
         snap["work_status_update"] = session.mem.get_state("work_status_update")
         snap["csat_score"] = session.mem.get_state("csat_score")
         snap["csat_factors"] = session.mem.get_state("csat_factors")
+        snap["gate2_task"] = session.mem.get_state("gate2_task")
+        snap["work_confirmed"] = session.mem.get_state("work_confirmed")
+        snap["work_confirmed_by"] = session.mem.get_state("work_confirmed_by")
+        snap["work_notes_for_customer"] = session.mem.get_state("work_notes_for_customer")
+        snap["customer_confirmed_resolution"] = session.mem.get_state("customer_confirmed_resolution")
+        snap["customer_resolution_comment"] = session.mem.get_state("customer_resolution_comment")
     return snap
 
 
@@ -340,10 +372,31 @@ def submit_feedback(sid: str, payload: FeedbackIn, user: dict = Depends(require_
         raise HTTPException(404, "session not found")
     if not runner.awaiting_feedback:
         raise HTTPException(409, "session is not awaiting feedback")
-    runner.submit_feedback(payload.resolved)
+    session = runner.session
+    session.mem.set_state("customer_resolution_comment", payload.comment)
     if payload.resolved:
-        _record_resolution_signal(runner.session)  # close the learning loop at the UI level
+        session.mem.set_state("customer_confirmed_resolution", True)
+    runner.submit_feedback(payload.resolved, payload.comment)
+    if payload.resolved:
+        _record_resolution_signal(session)  # close the learning loop at the UI level
     return {"ok": True, "resolved": payload.resolved}
+
+
+@app.post("/api/sessions/{sid}/csat")
+def submit_csat(sid: str, payload: CsatIn, user: dict = Depends(require_auth)) -> dict[str, Any]:
+    """Customer star rating (1-5) after confirming resolution."""
+    runner = _runners.get(sid)
+    if not runner:
+        raise HTTPException(404, "session not found")
+    score = max(1, min(5, int(payload.score)))
+    csat = round(score / 5, 3)
+    runner.session.mem.set_state("csat_score", csat)
+    runner.session.mem.set_state("csat_stars", score)
+    # The customer usually rates AFTER the case closed (snapshot already frozen) — patch it too.
+    if runner.session.result is not None:
+        runner.session.result["csat_score"] = csat
+        runner.session.result["csat_stars"] = score
+    return {"ok": True, "csat_score": csat}
 
 
 @app.post("/api/sessions/{sid}/work-update")

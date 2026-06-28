@@ -171,7 +171,8 @@ def risk_for(action_type: str, context: dict[str, Any]) -> dict[str, float]:
     return {k: round(v, 2) for k, v in base.items()}
 
 
-AUTO_APPROVE_WHITELIST = {"cooling_boost_monitor", "schedule_callback", "schedule_maintenance", "billing_adjustment"}
+# Only fully-automated, no-impact monitoring actions may ever skip the human authorisation gate.
+AUTO_APPROVE_WHITELIST = {"cooling_boost_monitor"}
 
 # Intents that ALWAYS require a human reviewer (and customer confirmation) — never auto-closed.
 # Customer submissions are normalised to customer_complaint, so this guarantees a human + a

@@ -47,14 +47,18 @@ def test_lazy_selection_for_low_stakes_billing(orch):
     assert "recommendation" in agents_seen
 
 
-def test_auto_approve_path(orch, platform):
-    # A P4 whitelisted, safety≈0 billing action auto-approves without a human.
+def test_billing_is_not_auto_closed_offline(orch, platform):
+    # Billing/complaints are no longer auto-approved or auto-resolved: a billing dispute is a
+    # non-telemetry event, so verification routes it to gate 3 (customer confirmation) rather
+    # than silently closing on execution success.
     session = orch.run(Event(
         type="billing_dispute", source_type="crm", customer_id="CUST-Northgate", severity="INFO",
         raw_content="Customer billing dispute: please audit the meter data and issue a corrective invoice adjustment for the disputed charge."))
     review = session.result["human_review"]
-    assert review["auto_approved"] is True
-    assert review["decision"] == "approved"
+    assert review["auto_approved"] is not True          # a (simulated) human authorised it
+    verify = session.result["verify"] or {}
+    assert verify.get("resolved") is not True           # never telemetry-auto-resolved
+    assert verify.get("partial_resolve") is True        # awaiting customer confirmation path
 
 
 def test_p1_never_auto_approved(orch):

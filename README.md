@@ -116,6 +116,56 @@ python -m pytest -q
 
 ---
 
+## Docker deployment
+
+### With Docker Compose (recommended)
+```bash
+cp .env.example .env
+# Edit .env — add your ANTHROPIC_API_KEY and JWT_SECRET
+docker compose up --build
+```
+Open http://localhost:8000
+
+Demo credentials:
+| Role | Email | Password |
+|---|---|---|
+| Manager | manager@energy.com | manager123 |
+| Operator | operator@energy.com | operator123 |
+| Engineer | engineer@energy.com | engineer123 |
+| Customer | customer@energy.com | customer123 |
+| Admin | admin@energy.com | admin123 |
+
+### Offline demo (no API key)
+```bash
+NBA_FORCE_OFFLINE=1 docker compose up --build
+```
+
+### Health check
+```bash
+curl http://localhost:8000/health
+# {"status":"ok","llm":"offline","store":"sqlite","sessions_active":0}
+```
+
+### Environment variables
+See `.env.example` for all options.
+
+---
+
+## The command & confirmation model
+
+Every case passes **three human checkpoints** — agents are analysts, humans decide:
+
+1. **Gate 1 — Authorise**: a manager/operator authorises the recommended action (P1/P2 need a
+   manager). Customer-raised issues are never auto-closed.
+2. **Gate 2 — Work done**: the assigned worker confirms completion — an **engineer** for field
+   work, an **operator** for billing/processing tasks. "Blocked" escalates the case.
+3. **Gate 3 — Customer**: the **customer** confirms the issue is resolved (plain-English
+   question + star rating). Only then does the case close and the learning cycle run.
+
+The UI shows this as a live `Gate 1 → Gate 2 → Gate 3` status bar.
+
+---
+
 ## Using real LLMs (optional)
 
 Everything runs offline using deterministic tool-mode + rule-based generation (this is the

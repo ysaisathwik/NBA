@@ -1,13 +1,15 @@
-# Core platform — keep light so the demo runs anywhere.
+# Core platform
 fastapi>=0.110
 uvicorn[standard]>=0.27
 pydantic>=2.6
 
-# Optional: real LLM reasoning. The platform runs fully offline without these.
-anthropic>=0.40 ; python_version >= "3.9"
+# LLM
+anthropic>=0.40
+
+# Config
 python-dotenv>=1.0
 
-# Optional: Supabase/Postgres long-term store. Falls back to SQLite if not installed.
+# Optional: Supabase long-term store (falls back to SQLite without this)
 # supabase>=2.4
 
 # Tests

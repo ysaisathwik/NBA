@@ -19,6 +19,12 @@ _VERIFY_WAIT = {"P1": 5, "P2": 15, "P3": 60, "P4": 240}
 FIELD_ACTIONS = {"emergency_fan_replacement", "isolation_reroute", "load_reduction_coolant",
                  "cooling_boost_monitor", "dispatch_inspection", "schedule_maintenance"}
 
+# Non-field actions that still require a human to process and confirm completion (Gate 2).
+PROCESSING_ACTIONS = {
+    "billing_adjustment",   # billing analyst reviews meter data, confirms adjustment issued
+    "schedule_callback",    # account manager confirms they have called the customer
+}
+
 DecisionProvider = Callable[[Session, dict[str, Any]], dict[str, Any]]
 FeedbackProvider = Callable[[Session], dict[str, Any]]
 
@@ -176,20 +182,25 @@ class Orchestrator:
         iteration = 0
 
         while True:
-            # Engineer gate (Bug 2): for field work in API mode, wait for the engineer to confirm
-            # completion before running telemetry verification. A 'blocked' update → replan.
-            if self._needs_field_work(session) and not session.mem.get_state("work_confirmed"):
+            # Gate 2 (Bug 2): a human worker must confirm the work is done before verification.
+            # Field actions → engineer; processing actions (billing/callback) → operator.
+            action_type = self._selected_action_type(session)
+            needs_gate2, worker_role = self._gate2_required(action_type)
+            if needs_gate2 and not session.mem.get_state("work_confirmed"):
+                exec_result = session.mem.get_blob("exec_result") or {}
+                task_label = (f"Complete field work: {action_type.replace('_', ' ')}" if worker_role == "engineer"
+                              else f"Process and confirm: {action_type.replace('_', ' ')}")
+                session.mem.set_state("gate2_task", {
+                    "action_type": action_type, "worker_role": worker_role, "task_label": task_label,
+                    "work_order_id": exec_result.get("work_order_id"), "is_field": worker_role == "engineer"})
                 session.set_state(CaseState.EXECUTING)
-                session.log("Awaiting engineer work update",
-                            detail="verification runs after the engineer confirms completion")
-                wu = self.work_update_provider(session) or {}
-                session.log("Engineer update received",
-                            detail=f"status={wu.get('status')} {wu.get('notes', '')}", data=wu)
-                if wu.get("status") == "blocked":
-                    session.mem.set_state("work_blocked", True)
-                    session.log("Work blocked", detail=wu.get("notes", "Engineer reported a blocker"))
-                    verify = {"resolved": False, "reason": "Engineer reported work blocked"}
-                    session.mem.set_blob("verify", verify)
+                session.log(f"Gate 2: awaiting {worker_role} confirmation", detail=task_label)
+                update = self.work_update_provider(session) if self.work_update_provider else {"status": "timeout"}
+                session.log("Gate 2: worker update received",
+                            detail=f"status={update.get('status')} {update.get('notes', '')}", data=update)
+                if update.get("status") == "blocked":
+                    session.set_state(CaseState.ESCALATED)
+                    session.log("Gate 2: work blocked — escalating", detail=update.get("notes", ""))
                     if session.event.customer_id:
                         try:
                             self.platform.agent("notification").use(
@@ -197,11 +208,13 @@ class Orchestrator:
                                 channel="sms", body="There's a short delay resolving your issue; our team is on it.")
                         except Exception:
                             pass
-                else:
-                    session.mem.set_state("work_confirmed", True)
-                    session.set_state(CaseState.VERIFYING)
-                    session.advance_clock(wait)
-                    verify = self.platform.agent("verification").run(session).output
+                    return
+                session.mem.set_state("work_confirmed", update.get("status") in {"completed", "done", "processed", "timeout"})
+                session.mem.set_state("work_confirmed_by", update.get("engineer_name", ""))
+                session.mem.set_state("work_notes_for_customer", update.get("notes") or "Work completed by our team.")
+                session.set_state(CaseState.VERIFYING)
+                session.advance_clock(wait)
+                verify = self.platform.agent("verification").run(session).output
             else:
                 session.set_state(CaseState.VERIFYING)
                 session.log("Verification wait", detail=f"advancing T+{wait}min (urgency {urgency})")
@@ -273,15 +286,20 @@ class Orchestrator:
         session.set_state(CaseState.EXECUTING)
         self.platform.agent("execution").run(session)
 
-    def _needs_field_work(self, session: Session) -> bool:
-        """True when a field crew was dispatched and we should wait for an engineer update."""
-        if not self.work_update_provider:
-            return False
+    def _selected_action_type(self, session: Session) -> str:
         review = session.mem.get_blob("human_review", {}) or {}
         candidates = session.mem.get_candidates()
         action = next((c for c in candidates if c["id"] == review.get("selected_action")),
                       candidates[0] if candidates else {})
-        return action.get("action_type") in FIELD_ACTIONS
+        return action.get("action_type", "")
+
+    def _gate2_required(self, action_type: str) -> tuple[bool, str]:
+        """Return (needs_gate2, worker_role) — who must confirm the work is done."""
+        if action_type in FIELD_ACTIONS:
+            return True, "engineer"
+        if action_type in PROCESSING_ACTIONS:
+            return True, "operator"
+        return False, ""
 
     # ------------------------------------------------- interactive feedback
     def _interactive_feedback(self, session: Session, review: dict[str, Any]) -> None:
@@ -290,8 +308,10 @@ class Orchestrator:
         Hooks in AFTER the goal loop. The customer confirms resolution or reports a persistent
         issue; each "No" triggers a replan + a more specific, customer-friendly question.
         """
-        if not self.feedback_provider or review.get("auto_approved"):
-            return
+        if not self.feedback_provider:
+            return  # offline/demo mode only — gate 3 still runs in API mode
+        if session.state == CaseState.ESCALATED:
+            return  # blocked/escalated cases do not ask the customer to confirm
         intent = session.mem.get_state("intent", {}) or {}
         urgency = intent.get("urgency_tier", "P4")
         max_loops = max(_REPLAN_LIMITS.get(urgency, 0), 2)

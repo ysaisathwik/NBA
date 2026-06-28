@@ -132,7 +132,7 @@ def test_work_update_role_enforcement():
     assert c.post(f"/api/sessions/{sid}/work-update", headers=mgr, json={"status": "completed"}).status_code == 403
 
 
-def test_engineer_blocked_then_completed():
+def test_engineer_blocked_escalates():
     c = client()
     mgr = auth(c, "manager@energy.com", "manager123")
     eng = auth(c, "engineer@energy.com", "engineer123")
@@ -142,12 +142,10 @@ def test_engineer_blocked_then_completed():
            json={"decision": "approved", "selected_action": snap["candidates"][0]["id"]})
     snap = _wait(c, sid, eng, lambda s: s.get("awaiting_work_update"))
     wo = (snap.get("exec_result") or {}).get("work_order_id", "")
-    # engineer reports a blocker → replan, then completes
+    # engineer reports a blocker → case escalates, no silent close, no customer confirmation
     c.post(f"/api/sessions/{sid}/work-update", headers=eng, json={"work_order_id": wo, "status": "blocked", "notes": "no parts"})
-    snap = _wait(c, sid, eng, lambda s: s.get("awaiting_work_update"))  # gate re-armed after replan
-    c.post(f"/api/sessions/{sid}/work-update", headers=eng, json={"work_order_id": wo, "status": "completed"})
-    snap = _wait(c, sid, mgr, lambda s: s.get("awaiting_feedback") or s.get("state") in {"ESCALATED", "CLOSED"})
-    assert any("Work blocked" in s["title"] for s in snap["trace"])
+    final = _wait(c, sid, mgr, lambda s: s.get("state") in {"ESCALATED", "CLOSED"})
+    assert any("work blocked" in s["title"].lower() for s in final["trace"])
 
 
 def test_customer_complaint_requires_human_and_confirmation():
@@ -166,24 +164,68 @@ def test_customer_complaint_requires_human_and_confirmation():
     assert (snap.get("human_review") or {}).get("auto_approved") is not True
     assert snap.get("required_role") == "operator"
 
-    # operator (human in the middle) approves
+    # Gate 1: operator (human in the middle) authorises
     c.post(f"/api/sessions/{sid}/decision", headers=op,
            json={"decision": "approved", "selected_action": snap["candidates"][0]["id"]})
 
-    # then the CUSTOMER must confirm resolution (feedback), not the operator
+    # Gate 2: a billing/processing task must be confirmed by the operator
+    snap = _wait(c, sid, op, lambda s: s.get("awaiting_work_update"))
+    assert snap.get("awaiting_work_update") is True
+    assert (snap.get("gate2_task") or {}).get("worker_role") == "operator"
+    c.post(f"/api/sessions/{sid}/work-update", headers=op,
+           json={"work_order_id": (snap.get("exec_result") or {}).get("work_order_id", ""),
+                 "status": "completed", "notes": "Adjustment issued after meter audit."})
+
+    # Gate 3: the CUSTOMER must confirm resolution, not the operator
+    snap = _wait(c, sid, op, lambda s: s.get("awaiting_feedback"))
+    assert snap.get("feedback_target") == "customer"
+    c.post(f"/api/sessions/{sid}/feedback", json={"resolved": True, "comment": "thanks"}, headers=cust)
+    final = _wait(c, sid, op, lambda s: s.get("state") == "CLOSED")
+    assert final["state"] == "CLOSED"
+
+
+def test_billing_passes_all_three_gates_no_auto_close():
+    """Billing dispute must pass Gate 1 (authorise) → Gate 2 (process) → Gate 3 (customer)."""
+    c = client()
+    op = auth(c, "operator@energy.com", "operator123")
+    cust = auth(c, "customer@energy.com", "customer123")
+    event = {"type": "billing_dispute", "source_type": "crm", "customer_id": "customer@energy.com",
+             "severity": "INFO",
+             "raw_content": "Customer billing dispute: please audit the meter data and issue a corrective invoice adjustment for the disputed charge."}
+    sid = c.post("/api/events", json=event, headers=op).json()["session_id"]
+
+    # Gate 1 — NOT auto-approved
+    snap = _wait(c, sid, op, lambda s: s.get("awaiting_human") or s.get("state") == "CLOSED")
+    assert snap.get("awaiting_human") is True
+    assert (snap.get("human_review") or {}).get("auto_approved") is not True
+    c.post(f"/api/sessions/{sid}/decision", headers=op,
+           json={"decision": "approved", "selected_action": snap["candidates"][0]["id"]})
+
+    # Gate 2 — operator processes
+    snap = _wait(c, sid, op, lambda s: s.get("awaiting_work_update"))
+    assert (snap.get("gate2_task") or {}).get("worker_role") == "operator"
+    c.post(f"/api/sessions/{sid}/work-update", headers=op,
+           json={"work_order_id": (snap.get("exec_result") or {}).get("work_order_id", ""),
+                 "status": "completed", "notes": "Adjustment issued."})
+
+    # Gate 3 — customer confirms + rates
     snap = _wait(c, sid, op, lambda s: s.get("awaiting_feedback"))
     assert snap.get("feedback_target") == "customer"
     c.post(f"/api/sessions/{sid}/feedback", json={"resolved": True}, headers=cust)
     final = _wait(c, sid, op, lambda s: s.get("state") == "CLOSED")
     assert final["state"] == "CLOSED"
+    assert final.get("customer_confirmed_resolution") is True
 
 
-def test_p4_billing_auto_approves_without_human():
+def test_csat_endpoint():
     c = client()
     op = auth(c, "operator@energy.com", "operator123")
-    event = {"type": "billing_dispute", "source_type": "crm", "customer_id": "CUST-Northgate",
-             "severity": "INFO",
-             "raw_content": "Customer billing dispute: please audit the meter data and issue a corrective invoice adjustment for the disputed charge."}
-    sid = c.post("/api/events", json=event, headers=op).json()["session_id"]
-    final = _wait(c, sid, op, lambda s: s.get("state") == "CLOSED")
-    assert final["human_review"]["auto_approved"] is True
+    sid = c.post("/api/events", json=c.get("/api/scenarios").json()[0]["event"], headers=op).json()["session_id"]
+    r = c.post(f"/api/sessions/{sid}/csat", json={"score": 4}, headers=op)
+    assert r.json()["csat_score"] == 0.8
+
+
+def test_health_endpoint_no_auth():
+    c = client()
+    r = c.get("/health")
+    assert r.status_code == 200 and r.json()["status"] == "ok"
