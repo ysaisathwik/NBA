@@ -67,6 +67,49 @@ class HITLAgent(Agent):
         whitelisted = top["action_type"] in self.domain.AUTO_APPROVE_WHITELIST
         return dims_ok and conf_ok and urgency_ok and whitelisted
 
+    # ---- dynamic iterative feedback -------------------------------------
+    def generate_followup(self, session, decision: dict[str, Any]) -> str:
+        """One LLM call: a concise resolution-check question after the human decides."""
+        action_type = self._action_type(session, decision)
+        raw = session.event.raw_content or session.event.type
+        q = self.llm.complete(
+            system=("You are a B2B energy operations assistant. Based on the human's decision, "
+                    "generate ONE concise follow-up question to check if the problem was resolved "
+                    "or if more action is needed. Max 20 words."),
+            user=f"Decision: {decision.get('decision')}. Action taken: {action_type}. Problem: {raw}.",
+            fast=True,
+        )
+        question = (q or "").strip() or self._default_followup(session, action_type)
+        session.mem.set_blob("followup_question", question)
+        return question
+
+    def generate_specific_followup(self, session, decision: dict[str, Any]) -> str:
+        """One LLM call: a more specific diagnostic question when the problem persists."""
+        action_type = self._action_type(session, decision)
+        raw = session.event.raw_content or session.event.type
+        q = self.llm.complete(
+            system="You are a B2B energy ops assistant helping diagnose a persistent problem.",
+            user=(f"Problem not yet resolved. Original issue: {raw}. Action taken: {action_type}. "
+                  "What specific detail should the operator check next? Max 25 words."),
+            fast=True,
+        )
+        question = (q or "").strip() or (
+            f"Confirm the {action_type} completed and check the latest telemetry and work-order "
+            f"status for {session.event.asset_id or 'the asset'}.")
+        session.mem.set_blob("followup_question", question)
+        return question
+
+    def _action_type(self, session, decision: dict[str, Any]) -> str:
+        sel = decision.get("selected_action")
+        for c in session.mem.get_candidates():
+            if c["id"] == sel:
+                return c["action_type"]
+        cands = session.mem.get_candidates()
+        return cands[0]["action_type"] if cands else "the recommended action"
+
+    def _default_followup(self, session, action_type: str) -> str:
+        return f"Has the issue on {session.event.asset_id or 'the asset'} been resolved after {action_type}?"
+
     def _routing(self, urgency: str) -> dict[str, Any]:
         if urgency == "P1":
             channels = ["operator_dashboard", "on_call_manager(SMS+Teams)", "field_engineer_lead(Teams)"]

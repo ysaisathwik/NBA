@@ -16,29 +16,41 @@
   header h1 span { color:var(--blue); }
   .metrics { display:flex; gap:18px; font-size:12px; color:var(--muted); }
   .metrics b { color:var(--text); }
-  .wrap { display:grid; grid-template-columns:280px 1fr 380px; gap:16px; padding:16px; height:calc(100vh - 56px); }
+
+  .dialogue { margin:16px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .dialogue .row { display:flex; gap:10px; align-items:flex-end; }
+  .dialogue textarea { flex:1; background:#0d1117; color:var(--text); border:1px solid var(--line);
+           border-radius:8px; padding:12px; font:inherit; resize:vertical; min-height:64px; }
+  .dialogue button { white-space:nowrap; }
+  #matched { margin-top:10px; font-size:12px; color:var(--muted); display:none; }
+
+  .wrap { display:grid; grid-template-columns:240px 1fr 380px; gap:16px; padding:0 16px 16px; height:calc(100vh - 230px); }
   .col { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:auto; }
   .col h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
             margin:0; padding:12px 14px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); }
   .pad { padding:12px 14px; }
   button { font:inherit; cursor:pointer; border:1px solid var(--line); background:#21262d; color:var(--text);
-           border-radius:6px; padding:8px 10px; width:100%; text-align:left; margin-bottom:8px; }
+           border-radius:6px; padding:8px 12px; text-align:left; margin-bottom:8px; }
   button:hover { border-color:var(--blue); }
+  button.full { width:100%; }
   button.primary { background:var(--blue); border-color:var(--blue); text-align:center; font-weight:600; }
   button.green { background:var(--green); border-color:var(--green); text-align:center; color:#04130a; font-weight:600; }
   button.red { background:transparent; border-color:var(--red); color:var(--red); text-align:center; }
-  input, textarea, select { width:100%; background:#0d1117; color:var(--text); border:1px solid var(--line);
+  textarea#mod { width:100%; background:#0d1117; color:var(--text); border:1px solid var(--line);
            border-radius:6px; padding:7px; margin-bottom:8px; font:inherit; }
-  label { font-size:11px; color:var(--muted); display:block; margin-bottom:3px; }
+
   .step { padding:8px 14px; border-bottom:1px solid #21262d; display:flex; gap:10px; align-items:baseline; }
   .step .n { color:var(--muted); font-variant-numeric:tabular-nums; min-width:22px; }
   .step .st { font-size:10px; text-transform:uppercase; color:var(--purple); min-width:120px; }
-  .step .ti { font-weight:600; }
-  .step .de { color:var(--muted); font-size:12px; }
-  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; }
+  .step .ti { font-weight:600; } .step .de { color:var(--muted); font-size:12px; }
+
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; margin:2px 4px 2px 0; }
   .b-blue{background:rgba(56,139,253,.15);color:var(--blue);} .b-green{background:rgba(63,185,80,.15);color:var(--green);}
   .b-amber{background:rgba(210,153,34,.15);color:var(--amber);} .b-red{background:rgba(248,81,73,.15);color:var(--red);}
   .b-purple{background:rgba(163,113,247,.15);color:var(--purple);}
+  .agent-anomaly{background:rgba(248,81,73,.15);color:var(--red);} .agent-knowledge{background:rgba(63,185,80,.15);color:var(--green);}
+  .agent-risk{background:rgba(210,153,34,.15);color:var(--amber);} .agent-explainability{background:rgba(163,113,247,.15);color:var(--purple);}
+
   .rec { border:1px solid var(--line); border-radius:8px; padding:11px; margin:10px 14px; }
   .rec.sel { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
   .rec h3 { margin:0 0 4px; font-size:14px; display:flex; justify-content:space-between; }
@@ -48,6 +60,11 @@
   .risk-bar { display:flex; gap:3px; margin-top:6px; }
   .risk-bar span { height:5px; border-radius:3px; flex:1; background:#21262d; position:relative; overflow:hidden; }
   .risk-bar span i { position:absolute; inset:0; transform-origin:left; }
+
+  .bubble { background:#1c2433; border:1px solid var(--blue); border-radius:12px 12px 12px 2px;
+            padding:12px 14px; margin:10px 14px; }
+  .bubble .who { font-size:11px; color:var(--blue); font-weight:600; margin-bottom:4px; }
+  .bubble .q { font-size:14px; }
   .empty { color:var(--muted); padding:20px 14px; text-align:center; font-size:13px; }
   .pill { font-size:11px; color:var(--muted); }
 </style>
@@ -57,28 +74,25 @@
   <h1>Intelligent <span>Next Best Action</span> Platform — Command Centre</h1>
   <div class="metrics" id="metrics"></div>
 </header>
+
+<!-- Item 1: full-width conversational dialogue box -->
+<div class="dialogue">
+  <div class="row">
+    <textarea id="dlg" placeholder="Describe your problem in plain English — e.g. 'The TR-441 transformer temperature is rising fast and we have 2400 customers affected'"></textarea>
+    <button class="primary" onclick="submitDialogue()">Submit</button>
+  </div>
+  <div id="matched"></div>
+</div>
+
 <div class="wrap">
   <div class="col">
-    <h2>Trigger event</h2>
+    <h2>Preset scenarios</h2>
     <div class="pad" id="scenarios"></div>
-    <h2>Custom event</h2>
-    <div class="pad">
-      <label>Type</label>
-      <select id="f-type">
-        <option>sensor_alert</option><option>billing_dispute</option><option>service_outage</option>
-        <option>customer_complaint</option><option>capacity_alert</option><option>data_anomaly</option>
-      </select>
-      <label>Asset ID</label><input id="f-asset" placeholder="TR-441" />
-      <label>Severity</label>
-      <select id="f-sev"><option>CRITICAL</option><option>MAJOR</option><option>WARNING</option><option>INFO</option></select>
-      <label>Description</label><textarea id="f-content" rows="3" placeholder="Describe the signal..."></textarea>
-      <button class="primary" onclick="customEvent()">Run case</button>
-    </div>
   </div>
 
   <div class="col">
     <h2>Live agent trace <span id="state-badge"></span></h2>
-    <div id="trace"><div class="empty">Trigger an event to begin.</div></div>
+    <div id="trace"><div class="empty">Describe a problem above (or pick a preset) to begin.</div></div>
   </div>
 
   <div class="col">
@@ -102,32 +116,46 @@ async function loadMetrics() {
 async function loadScenarios() {
   const s = await api('/api/scenarios');
   document.getElementById('scenarios').innerHTML = s.map((x,i)=>
-    `<button onclick='runScenario(${i})'>${x.label}</button>`).join('');
+    `<button class="full" onclick='runScenario(${i})'>${x.label}</button>`).join('');
   window._scenarios = s;
 }
-
 async function runScenario(i) { await startEvent(window._scenarios[i].event); }
 
-async function customEvent() {
-  await startEvent({
-    type: document.getElementById('f-type').value,
-    asset_id: document.getElementById('f-asset').value || null,
-    severity: document.getElementById('f-sev').value,
-    raw_content: document.getElementById('f-content').value,
-    source_type: 'manual',
-  });
+function agentBadges(list) {
+  return (list||[]).map(a => `<span class="badge agent-${a} b-blue">${a}</span>`).join('');
+}
+
+// Item 2/3: free-text dialogue → parsed event → matched agents
+async function submitDialogue() {
+  const text = document.getElementById('dlg').value.trim();
+  if (!text) return;
+  const r = await api('/api/dialogue', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({raw_dialogue: text})});
+  const ex = r.extracted_event || {};
+  const md = document.getElementById('matched');
+  md.style.display = 'block';
+  md.innerHTML = `Parsed → <b>${ex.event_type}</b> · severity <b>${ex.severity}</b>` +
+    (ex.asset_id?` · asset <b>${ex.asset_id}</b>`:'') +
+    (ex.customer_count?` · ${ex.customer_count} customers`:'') +
+    `<div style="margin-top:6px">Matched agents: ${agentBadges(r.matched_agents)}</div>`;
+  beginPolling(r.session_id);
 }
 
 async function startEvent(event) {
   const r = await api('/api/events', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(event)});
-  activeSid = r.session_id; selectedAction = null;
+  document.getElementById('matched').style.display = 'none';
+  beginPolling(r.session_id);
+}
+
+function beginPolling(sid) {
+  activeSid = sid; selectedAction = null;
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(poll, 900);
   poll();
 }
 
 const stateClass = s => ({RESOLVED:'b-green',CLOSED:'b-green',ESCALATED:'b-red',PARTIAL_RESOLVE:'b-amber',
-  HUMAN_REVIEW:'b-amber',REPLANNING:'b-purple'}[s] || 'b-blue');
+  HUMAN_REVIEW:'b-amber',VERIFYING:'b-amber',REPLANNING:'b-purple'}[s] || 'b-blue');
 
 async function poll() {
   if (!activeSid) return;
@@ -137,7 +165,7 @@ async function poll() {
     `<span class="badge ${stateClass(snap.state)}">${snap.state}</span>`;
   renderTrace(snap.trace || []);
   renderReview(snap);
-  if (['CLOSED','RESOLVED','ESCALATED'].includes(snap.state) && !snap.awaiting_human) {
+  if (snap.state === 'CLOSED' && !snap.awaiting_human && !snap.awaiting_feedback) {
     clearInterval(pollTimer); pollTimer = null;
   }
 }
@@ -146,9 +174,7 @@ function renderTrace(trace) {
   const el = document.getElementById('trace');
   if (!trace.length) { el.innerHTML = '<div class="empty">Starting…</div>'; return; }
   el.innerHTML = trace.map(s => `
-    <div class="step">
-      <span class="n">${s.step}</span>
-      <span class="st">${s.state}</span>
+    <div class="step"><span class="n">${s.step}</span><span class="st">${s.state}</span>
       <span><span class="ti">${s.title}</span> ${s.detail?`<span class="de">— ${s.detail}</span>`:''}</span>
     </div>`).join('');
   el.scrollTop = el.scrollHeight;
@@ -184,22 +210,36 @@ function renderReview(snap) {
     </div>`;
   }).join('');
 
+  // Phase A: awaiting the human decision
   if (snap.awaiting_human) {
     if (!selectedAction) selectedAction = cands[0].id;
     html += `<div class="pad">
       <span class="badge b-amber">AWAITING HUMAN REVIEW</span>
-      <label style="margin-top:10px">Modification / comment (optional)</label>
-      <textarea id="mod" rows="2" placeholder="e.g. Notify affected customers before load transfer"></textarea>
-      <button class="green" onclick="decide('approved')">Approve selected</button>
-      <button class="primary" onclick="decide('modified')">Approve with modification</button>
-      <button class="red" onclick="decide('rejected')">Reject</button>
+      <textarea id="mod" rows="2" placeholder="Modification / comment (optional)"></textarea>
+      <button class="green full" onclick="decide('approved')">Approve selected</button>
+      <button class="primary full" onclick="decide('modified')">Approve with modification</button>
+      <button class="red full" onclick="decide('rejected')">Reject</button>
     </div>`;
-  } else if (review.decision && review.decision!=='pending') {
+  }
+  // Phase B: iterative feedback chat bubble (item 6)
+  else if (snap.awaiting_feedback && snap.followup_question) {
+    html += `<div class="bubble">
+        <div class="who">NBA assistant</div>
+        <div class="q">${snap.followup_question}</div>
+      </div>
+      <div class="pad">
+        <button class="green full" onclick="sendFeedback(true)">Yes, resolved</button>
+        <button class="red full" onclick="sendFeedback(false)">No, still an issue</button>
+      </div>`;
+  }
+  // Phase C: decision recorded / outcome
+  else if (review.decision && review.decision!=='pending') {
     const v = snap.verify || {};
     html += `<div class="pad">
       <span class="badge ${review.decision==='rejected'?'b-red':'b-green'}">Decision: ${review.decision}
         ${review.auto_approved?'(auto)':''}${review.emergency_override?'(override)':''}</span>
       <div class="pill" style="margin-top:8px">${review.comments||''}</div>
+      ${snap.followup_question?`<div class="bubble" style="margin-left:0"><div class="who">NBA assistant</div><div class="q">${snap.followup_question}</div></div>`:''}
       ${v.resolved!==undefined?`<div class="pill" style="margin-top:8px">Verification:
         ${v.resolved?'✓ resolved':(v.partial_resolve?'~ partial':'✗ not resolved')} — ${v.reason||''}</div>`:''}
     </div>`;
@@ -213,6 +253,12 @@ async function decide(decision) {
   const mod = (document.getElementById('mod')||{}).value || '';
   await api('/api/sessions/'+activeSid+'/decision', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({decision, selected_action:selectedAction, modifications: mod?[mod]:[], comments: mod})});
+  poll();
+}
+
+async function sendFeedback(resolved) {
+  await api('/api/sessions/'+activeSid+'/feedback', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({resolved})});
   poll();
 }
 

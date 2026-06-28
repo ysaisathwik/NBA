@@ -52,6 +52,8 @@ class Agent:
 
     def use(self, tool_name: str, **kwargs: Any) -> Any:
         """Run a registered tool, record the call, return its output."""
+        if not hasattr(self, "_calls"):
+            self._calls = []  # allow tool use from helper methods called outside run()
         call = self.platform.tools.get(tool_name).run(**kwargs)
         self._calls.append(call.__dict__)
         return call.output

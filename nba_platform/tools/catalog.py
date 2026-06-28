@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from ..memory.longterm import LongTermStore
+from . import static_tools as st
 from .base import Tool, ToolRegistry
 from .simulated import Simulators
 
 
-def build_registry(store: LongTermStore, sims: Simulators) -> ToolRegistry:
+def build_registry(store: LongTermStore, sims: Simulators, domain=None) -> ToolRegistry:
     reg = ToolRegistry()
 
     def add(name: str, ttype: str, desc: str, fn) -> None:
@@ -64,6 +65,20 @@ def build_registry(store: LongTermStore, sims: Simulators) -> ToolRegistry:
     add("audit_write", "supabase", "Append an entry to the audit log",
         lambda user_id, action, entity_type, entity_id, payload: store.audit(
             user_id, action, entity_type, entity_id, payload))
+
+    # ---- static fast-path tools (LLM-free) ------------------------------
+    add("keyword_classifier", "internal", "Regex/keyword intent fallback (DialogueParser)",
+        lambda text: st.keyword_classifier(domain, text))
+    add("asset_health_check", "supabase", "Quick asset health_score lookup (AnomalyAgent)",
+        lambda asset_id: st.asset_health_check(store, asset_id))
+    add("sla_lookup", "supabase", "Customer SLA tier lookup (RiskAgent)",
+        lambda customer_id: st.sla_lookup(store, customer_id))
+    add("action_template_fetch", "supabase", "Rule-based action templates by intent×severity (RecommendationAgent)",
+        lambda intent, severity=None: st.action_template_fetch(domain, intent, severity))
+    add("knowledge_summary_fetch", "vector", "Cached knowledge summary fast path (KnowledgeAgent)",
+        lambda query: st.knowledge_summary_fetch(store, query))
+    add("sentiment_baseline", "supabase", "Customer baseline sentiment (VerificationAgent)",
+        lambda customer_id: st.sentiment_baseline(store, customer_id))
 
     return reg
 

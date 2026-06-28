@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .base import Agent, AgentResult
+from .dialogue_parser import DialogueParserAgent
 from .planner import PlannerAgent
 from .context import ContextAgent
 from .intent import IntentAgent
@@ -17,6 +18,7 @@ from .compression import MemoryCompressionAgent
 from .learning import LearningAgent
 
 AGENT_CLASSES = {
+    "dialogue_parser": DialogueParserAgent,
     "planner": PlannerAgent,
     "context": ContextAgent,
     "intent": IntentAgent,

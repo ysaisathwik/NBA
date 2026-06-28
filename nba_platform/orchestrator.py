@@ -16,6 +16,7 @@ _REPLAN_LIMITS = {"P1": 3, "P2": 2, "P3": 1, "P4": 0}
 _VERIFY_WAIT = {"P1": 5, "P2": 15, "P3": 60, "P4": 240}
 
 DecisionProvider = Callable[[Session, dict[str, Any]], dict[str, Any]]
+FeedbackProvider = Callable[[Session], dict[str, Any]]
 
 
 def default_reviewer(session: Session, package: dict[str, Any]) -> dict[str, Any]:
@@ -35,9 +36,12 @@ def default_reviewer(session: Session, package: dict[str, Any]) -> dict[str, Any
 
 
 class Orchestrator:
-    def __init__(self, platform: Platform, decision_provider: DecisionProvider | None = None) -> None:
+    def __init__(self, platform: Platform, decision_provider: DecisionProvider | None = None,
+                 feedback_provider: FeedbackProvider | None = None) -> None:
         self.platform = platform
         self.decision_provider = decision_provider or default_reviewer
+        # Optional human feedback gate for the iterative resolution loop (API mode).
+        self.feedback_provider = feedback_provider
 
     # ---------------------------------------------------------------- run
     def run(self, event: Event, goal: str | None = None) -> Session:
@@ -123,14 +127,23 @@ class Orchestrator:
             self._compress_and_learn(session)
             return
 
-        # 6) Execution
+        # 6) Generate the first dynamic follow-up question (interactive mode only).
+        if self.feedback_provider and review.get("decision") in {"approved", "modified"} \
+                and not review.get("auto_approved"):
+            q = self.platform.agent("hitl").generate_followup(session, review)
+            session.log("Follow-up question prepared", detail=q)
+
+        # 7) Execution
         session.set_state(CaseState.EXECUTING)
         self.platform.agent("execution").run(session)
 
-        # 7) Verify → replan goal loop
+        # 8) Verify → replan goal loop
         self._goal_loop(session)
 
-        # 8) Compression + Learning
+        # 9) Iterative human feedback loop (interactive mode only)
+        self._interactive_feedback(session, review)
+
+        # 10) Compression + Learning
         self._compress_and_learn(session)
 
     # --------------------------------------------------------- goal loop
@@ -195,6 +208,47 @@ class Orchestrator:
         session.mem.set_blob("human_review", new_review)
         session.set_state(CaseState.EXECUTING)
         self.platform.agent("execution").run(session)
+
+    # ------------------------------------------------- interactive feedback
+    def _interactive_feedback(self, session: Session, review: dict[str, Any]) -> None:
+        """Dynamic iterative confirmation loop driven by human yes/no feedback (API mode).
+
+        Hooks in AFTER the goal loop. The operator confirms resolution or reports a persistent
+        issue; each "No" triggers a replan + a more specific LLM follow-up question, bounded by
+        the urgency replan limit.
+        """
+        if not self.feedback_provider or review.get("auto_approved"):
+            return
+        intent = session.mem.get_state("intent", {}) or {}
+        urgency = intent.get("urgency_tier", "P4")
+        max_loops = max(_REPLAN_LIMITS.get(urgency, 0), 2)
+
+        if not session.mem.get_blob("followup_question"):
+            self.platform.agent("hitl").generate_followup(session, review)
+
+        loops = 0
+        while True:
+            session.set_state(CaseState.VERIFYING)
+            session.log("Awaiting operator feedback", detail=session.mem.get_blob("followup_question"))
+            fb = self.feedback_provider(session) or {}
+            if fb.get("resolved"):
+                session.set_state(CaseState.RESOLVED)
+                session.log("Operator confirmed resolution", detail="case marked resolved by human feedback")
+                return
+            loops += 1
+            if loops > max_loops:
+                session.set_state(CaseState.ESCALATED)
+                session.log("Feedback loop limit reached",
+                            detail=f"escalating after {loops - 1} unresolved confirmations")
+                return
+            session.set_state(CaseState.REPLANNING)
+            rp = self.platform.agent("planner").replan(session, {"resolved": False})
+            session.log(f"Operator reports unresolved (iteration {loops})", detail=rp.get("reason"), data=rp)
+            self._escalate_action(session)
+            session.advance_clock(_VERIFY_WAIT.get(urgency, 5))
+            self.platform.agent("verification").run(session)
+            q = self.platform.agent("hitl").generate_specific_followup(session, review)
+            session.log("Follow-up question", detail=q)
 
     # ----------------------------------------------------- post-resolution
     def _compress_and_learn(self, session: Session) -> None:

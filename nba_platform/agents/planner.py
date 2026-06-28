@@ -7,6 +7,8 @@ from .base import Agent
 
 # Fixed generative tail of every case (after analysis agents).
 PIPELINE_TAIL = ["recommendation", "explainability", "hitl", "execution", "verification"]
+# Analysis agents the Planner schedules (others in the keyword map live in the fixed pipeline).
+_ANALYSIS_AGENTS = {"anomaly", "knowledge", "risk"}
 
 
 class PlannerAgent(Agent):
@@ -17,11 +19,15 @@ class PlannerAgent(Agent):
         ctx = session.mem.get_context()
         e = session.event
 
-        analysis = self._select_analysis(intent, ctx, e)
+        matched = session.mem.get_state("matched_agents", []) or []
+        rule_selected = self._select_analysis(intent, ctx, e)
+        analysis, keyword_only = self._merge(rule_selected, matched)
         plan = {
             "analysis_agents": analysis,
+            "rule_matched": rule_selected,
+            "keyword_matched": [a for a in matched if a in _ANALYSIS_AGENTS],
             "pipeline": PIPELINE_TAIL,
-            "reason": self._reason(intent, analysis, ctx),
+            "reason": self._reason(intent, analysis, ctx, rule_selected, keyword_only),
             "fallback_used": not self.llm.available,
         }
         # LLM may refine the reasoning narrative (selection stays deterministic for safety).
@@ -59,9 +65,25 @@ class PlannerAgent(Agent):
             selected.append("risk")
         return selected
 
-    def _reason(self, intent: dict, analysis: list[str], ctx: dict) -> str:
-        return (f"{intent.get('urgency_tier')} {intent.get('primary_intent')} → activating "
-                f"{analysis + PIPELINE_TAIL}" + (" (cold start)" if ctx.get("cold_start") else ""))
+    def _merge(self, rule_selected: list[str], matched: list[str]) -> tuple[list[str], list[str]]:
+        """Union rule-selected analysis agents with keyword-matched ones (rules first)."""
+        merged = list(rule_selected)
+        keyword_only: list[str] = []
+        for a in matched:
+            if a in _ANALYSIS_AGENTS and a not in merged:
+                merged.append(a)
+                keyword_only.append(a)
+        return merged, keyword_only
+
+    def _reason(self, intent: dict, analysis: list[str], ctx: dict,
+                rule_selected: list[str], keyword_only: list[str]) -> str:
+        parts = [f"{intent.get('urgency_tier')} {intent.get('primary_intent')} → activating {analysis + PIPELINE_TAIL}"]
+        parts.append(f"rule-matched={rule_selected}")
+        if keyword_only:
+            parts.append(f"keyword-matched(+)={keyword_only}")
+        if ctx.get("cold_start"):
+            parts.append("cold start")
+        return "; ".join(parts)
 
     # ---- replan decision (goal loop) ------------------------------------
     def replan(self, session, verify: dict) -> dict[str, Any]:

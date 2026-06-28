@@ -21,9 +21,9 @@ class Platform:
         self.working = WorkingMemory()
         self.store = LongTermStore(self.settings.db_path)
         self.sims = Simulators()
-        self.tools = build_registry(self.store, self.sims)
-        self.llm = get_llm()
         self.domain = load_domain(self.settings.domain)
+        self.tools = build_registry(self.store, self.sims, self.domain)
+        self.llm = get_llm()
         if seed:
             seed_domain(self.settings.domain, self.store)
         # build agents lazily to avoid an import cycle (agents import Platform typing only)
@@ -123,8 +123,11 @@ class Session:
             "state": self.state.value,
             "goal": self.goal,
             "iteration": self.iteration,
-            "event": self.event.model_dump(),
+            "event": self.event.model_dump(mode="json"),
             "trace": self.trace,
+            "extracted_event": self.mem.get_blob("extracted_event"),
+            "matched_agents": self.mem.get_state("matched_agents", []),
+            "followup_question": self.mem.get_blob("followup_question"),
             "candidates": self.mem.get_candidates(),
             "explanations": self.mem.get_blob("explanations", []),
             "context": self.mem.get_context(),

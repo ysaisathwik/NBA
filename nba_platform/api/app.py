@@ -1,6 +1,7 @@
 """FastAPI command-centre: trigger events, watch the live agent trace, review recommendations."""
 from __future__ import annotations
 
+import queue
 import threading
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,9 @@ class SessionRunner:
         self.decision_event = threading.Event()
         self.decision: dict[str, Any] | None = None
         self.awaiting = False
+        # iterative-feedback gate (supports multiple rounds → queue)
+        self.feedback_q: "queue.Queue[dict[str, Any]]" = queue.Queue()
+        self.awaiting_feedback = False
 
     def provider(self, session: Session, package: dict[str, Any]) -> dict[str, Any]:
         self.awaiting = True
@@ -48,6 +52,18 @@ class SessionRunner:
     def submit(self, decision: dict[str, Any]) -> None:
         self.decision = decision
         self.decision_event.set()
+
+    def feedback_provider(self, session: Session) -> dict[str, Any]:
+        self.awaiting_feedback = True
+        try:
+            fb = self.feedback_q.get(timeout=1200)
+        except queue.Empty:
+            fb = {"resolved": True}  # no operator response → assume resolved (audit-logged)
+        self.awaiting_feedback = False
+        return fb
+
+    def submit_feedback(self, resolved: bool) -> None:
+        self.feedback_q.put({"resolved": resolved})
 
 
 _runners: dict[str, SessionRunner] = {}
@@ -73,6 +89,14 @@ class DecisionIn(BaseModel):
     reviewer_id: str = "operator"
 
 
+class DialogueIn(BaseModel):
+    raw_dialogue: str = ""
+
+
+class FeedbackIn(BaseModel):
+    resolved: bool = False
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(_STATIC / "index.html")
@@ -96,15 +120,43 @@ def scenarios() -> list[dict[str, Any]]:
     ]
 
 
+def _start(session: Session) -> SessionRunner:
+    runner = SessionRunner(session)
+    _runners[session.sid] = runner
+    orch = Orchestrator(platform, decision_provider=runner.provider,
+                        feedback_provider=runner.feedback_provider)
+    threading.Thread(target=orch.run_prepared, args=(session,), daemon=True).start()
+    return runner
+
+
 @app.post("/api/events")
 def create_event(payload: EventIn) -> dict[str, Any]:
     event = Event(**payload.model_dump())
     session = platform.new_session(event)
-    runner = SessionRunner(session)
-    _runners[session.sid] = runner
-    orch = Orchestrator(platform, decision_provider=runner.provider)
-    threading.Thread(target=orch.run_prepared, args=(session,), daemon=True).start()
+    _start(session)
     return {"session_id": session.sid}
+
+
+@app.post("/api/dialogue")
+def submit_dialogue(payload: DialogueIn) -> dict[str, Any]:
+    raw = payload.raw_dialogue or ""
+    parser = platform.agent("dialogue_parser")
+    parsed = parser.parse(raw)
+    event = Event(
+        type=parsed["event_type"], source_type="dialogue", asset_id=parsed.get("asset_id"),
+        severity=parsed.get("severity", "WARNING"), raw_content=raw,
+        metadata={"customer_count": parsed.get("customer_count")},
+    )
+    session = platform.new_session(event)
+    # hand the keyword-matched agents to the Planner via session state
+    session.mem.set_state("matched_agents", parsed["matched_agents"])
+    session.mem.set_blob("extracted_event", parsed)
+    session.log("Dialogue parsed",
+                detail=f"event={event.type} · severity={event.severity} · matched={parsed['matched_agents']}",
+                data=parsed)
+    _start(session)
+    return {"session_id": session.sid, "extracted_event": parsed,
+            "matched_agents": parsed["matched_agents"]}
 
 
 @app.get("/api/sessions")
@@ -127,7 +179,13 @@ def get_session(sid: str) -> dict[str, Any]:
     snap["trace"] = session.trace
     snap["state"] = session.state.value
     snap["awaiting_human"] = runner.awaiting
+    snap["awaiting_feedback"] = runner.awaiting_feedback
     snap["review_package"] = session.mem.get_blob("review_package") if runner.awaiting else None
+    # keep these live while the case is in flight (snapshot may be the pre-flush capture)
+    if session.result is None:
+        snap["followup_question"] = session.mem.get_blob("followup_question")
+        snap["matched_agents"] = session.mem.get_state("matched_agents", [])
+        snap["extracted_event"] = session.mem.get_blob("extracted_event")
     return snap
 
 
@@ -145,6 +203,17 @@ def submit_decision(sid: str, payload: DecisionIn) -> dict[str, Any]:
     ).model_dump()
     runner.submit(review)
     return {"ok": True}
+
+
+@app.post("/api/sessions/{sid}/feedback")
+def submit_feedback(sid: str, payload: FeedbackIn) -> dict[str, Any]:
+    runner = _runners.get(sid)
+    if not runner:
+        raise HTTPException(404, "session not found")
+    if not runner.awaiting_feedback:
+        raise HTTPException(409, "session is not awaiting feedback")
+    runner.submit_feedback(payload.resolved)
+    return {"ok": True, "resolved": payload.resolved}
 
 
 @app.get("/api/metrics")

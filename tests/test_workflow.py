@@ -115,6 +115,32 @@ def test_risk_scores_are_multidimensional(orch):
     assert risk["safety"] >= 0.9  # live HV equipment rule
 
 
+def test_dialogue_parser_extracts_offline(platform):
+    parsed = platform.agent("dialogue_parser").parse(
+        "The TR-441 transformer temperature is rising fast and we have 2400 customers affected")
+    assert parsed["asset_id"] == "TR-441"
+    assert parsed["event_type"] == "sensor_alert"
+    assert parsed["severity"] == "CRITICAL"
+    assert parsed["customer_count"] == 2400
+    assert {"anomaly", "knowledge", "risk"}.issubset(set(parsed["matched_agents"]))
+
+
+def test_planner_merges_keyword_matched_agents(platform):
+    # A low-stakes billing event whose rule-based selection skips risk/anomaly...
+    ev = Event(type="billing_dispute", source_type="crm", customer_id="CUST-Northgate",
+               severity="INFO", raw_content="invoice dispute")
+    session = platform.new_session(ev)
+    # ...but the dialogue layer keyword-matched these agents:
+    session.mem.set_state("matched_agents", ["risk", "explainability", "anomaly"])
+    platform.agent("context").run(session)
+    platform.agent("intent").run(session)
+    plan = platform.agent("planner").run(session).output
+    assert "risk" in plan["analysis_agents"]      # merged in from keywords
+    assert "anomaly" in plan["analysis_agents"]
+    assert "risk" in plan["keyword_matched"]
+    assert "explainability" not in plan["analysis_agents"]  # lives in the fixed pipeline tail
+
+
 def test_concurrent_event_merges_into_active_session(platform):
     # EC-06: a second event for the same asset injects rather than duplicating.
     from nba_platform.orchestrator import Orchestrator

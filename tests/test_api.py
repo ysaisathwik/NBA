@@ -22,7 +22,7 @@ def _wait(client, sid, predicate, timeout=8.0):
     return snap
 
 
-def test_api_end_to_end_with_human_decision():
+def test_api_end_to_end_with_human_decision_and_feedback():
     client = TestClient(api_module.app)
 
     scenarios = client.get("/api/scenarios").json()
@@ -41,10 +41,48 @@ def test_api_end_to_end_with_human_decision():
                           "modifications": ["Notify customers first"], "comments": "go"})
     assert r.json()["ok"] is True
 
-    # wait for resolution
-    final = _wait(client, sid, lambda s: s.get("state") in {"CLOSED", "RESOLVED"})
-    assert final["state"] in {"CLOSED", "RESOLVED"}
-    assert final["verify"]["resolved"] is True
+    # iterative feedback: a follow-up question is generated and the loop awaits feedback
+    snap = _wait(client, sid, lambda s: s.get("awaiting_feedback"))
+    assert snap.get("awaiting_feedback") is True
+    assert snap.get("followup_question")
+
+    # operator confirms resolution
+    fb = client.post(f"/api/sessions/{sid}/feedback", json={"resolved": True})
+    assert fb.json()["ok"] is True
+
+    final = _wait(client, sid, lambda s: s.get("state") == "CLOSED")
+    assert final["state"] == "CLOSED"
+
+
+def test_api_feedback_loop_with_unresolved_then_resolved():
+    client = TestClient(api_module.app)
+    sid = client.post("/api/events", json=client.get("/api/scenarios").json()[0]["event"]).json()["session_id"]
+
+    snap = _wait(client, sid, lambda s: s.get("awaiting_human"))
+    client.post(f"/api/sessions/{sid}/decision",
+                json={"decision": "approved", "selected_action": snap["candidates"][0]["id"]})
+
+    snap = _wait(client, sid, lambda s: s.get("awaiting_feedback"))
+    q1 = snap["followup_question"]
+    # report still an issue → a new, more specific follow-up is generated
+    client.post(f"/api/sessions/{sid}/feedback", json={"resolved": False})
+    snap = _wait(client, sid, lambda s: s.get("awaiting_feedback") and s.get("followup_question") != q1)
+    assert snap["followup_question"] and snap["followup_question"] != q1
+    # then confirm resolution
+    client.post(f"/api/sessions/{sid}/feedback", json={"resolved": True})
+    final = _wait(client, sid, lambda s: s.get("state") == "CLOSED")
+    assert final["state"] == "CLOSED"
+
+
+def test_api_dialogue_extracts_event_and_matches_agents():
+    client = TestClient(api_module.app)
+    r = client.post("/api/dialogue", json={
+        "raw_dialogue": "The TR-441 transformer temperature is rising fast and we have 2400 customers affected"}).json()
+    ex = r["extracted_event"]
+    assert ex["asset_id"] == "TR-441"
+    assert ex["event_type"] == "sensor_alert"
+    assert ex["customer_count"] == 2400
+    assert {"anomaly", "knowledge", "risk"}.issubset(set(r["matched_agents"]))
 
 
 def test_api_auto_approve_needs_no_human():

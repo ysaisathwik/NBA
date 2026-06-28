@@ -28,10 +28,11 @@ is reached.
 | Human-in-the-Loop review | [`agents/hitl.py`](nba_platform/agents/hitl.py) + Web UI review queue |
 | Memory-driven learning | [`agents/compression.py`](nba_platform/agents/compression.py), [`agents/learning.py`](nba_platform/agents/learning.py) |
 
-### The 13 agents
-Planner · Context Retrieval · Intent Classification · Knowledge · Risk Assessment ·
-Anomaly Detection · Recommendation · Explainability · Human-in-the-Loop · Execution ·
-Verification · Memory Compression · Learning.
+### The agents
+**Dialogue Parser** (free-text → structured event + keyword→agent matching) · Planner ·
+Context Retrieval · Intent Classification · Knowledge · Risk Assessment · Anomaly Detection ·
+Recommendation · Explainability · Human-in-the-Loop (with dynamic iterative follow-up) ·
+Execution · Verification · Memory Compression · Learning.
 
 ### Memory tiers
 - **Working (Redis-like)** — session blackboard, TTL, pub/sub. `memory/working.py`
@@ -63,7 +64,17 @@ including the goal loop / replan and memory compression — printing the 15-step
 python -m nba_platform.api.app
 # open http://127.0.0.1:8000
 ```
-Trigger events, watch the live agent trace, and approve/modify/reject recommendations.
+- **Describe a problem in plain English** in the dialogue box at the top — the
+  `DialogueParserAgent` extracts a structured `Event` and shows which specialist agents the
+  keywords matched (coloured badges) before the pipeline runs.
+- Watch the live agent trace, then **approve / modify / reject** recommendations.
+- After your decision, the platform asks a **dynamic LLM follow-up question** ("Has the
+  transformer returned below 110°C?"). Answer **Yes, resolved** to close, or **No, still an
+  issue** to trigger a replan and a more specific next question — an iterative resolution loop.
+
+Key endpoints: `POST /api/dialogue` (free-text → event + matched agents),
+`POST /api/events` (structured event), `POST /api/sessions/{sid}/decision` (HITL decision),
+`POST /api/sessions/{sid}/feedback` (`{resolved: true|false}` iterative loop).
 
 ### 3) Run the tests
 ```bash
