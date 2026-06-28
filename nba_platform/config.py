@@ -27,6 +27,12 @@ class Settings:
     db_path: str = field(default_factory=lambda: os.environ.get("NBA_DB_PATH", "nba_platform.db"))
     force_offline: bool = field(default_factory=lambda: _flag("NBA_FORCE_OFFLINE"))
 
+    # Supabase (optional). When both are set and the `supabase` package is installed, the
+    # platform uses Supabase/Postgres as the long-term store; otherwise it falls back to SQLite.
+    supabase_url: str = field(default_factory=lambda: os.environ.get("SUPABASE_URL", "").strip())
+    supabase_key: str = field(default_factory=lambda: os.environ.get("SUPABASE_KEY", "").strip())
+    jwt_secret: str = field(default_factory=lambda: os.environ.get("JWT_SECRET", "nba-platform-dev-secret-change-in-prod"))
+
     # Tunables mirrored from the architecture reference.
     similarity_threshold: float = 0.25  # cold-start gate (local hashed embeddings run lower than 0.75)
     episodic_precedent_threshold: float = 0.80
@@ -41,6 +47,10 @@ class Settings:
     def llm_available(self) -> bool:
         """True when a real LLM can be used (key present and offline not forced)."""
         return bool(self.anthropic_api_key) and not self.force_offline
+
+    @property
+    def supabase_configured(self) -> bool:
+        return bool(self.supabase_url and self.supabase_key)
 
 
 _settings: Settings | None = None

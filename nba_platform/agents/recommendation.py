@@ -10,12 +10,49 @@ from ..schemas import Candidate
 class RecommendationAgent(Agent):
     name = "recommendation"
 
+    def _compute_relevance_score(self, session) -> float:
+        """0-1 relevance: how well does the event match the domain + available context?"""
+        intent = session.mem.get_state("intent", {}) or {}
+        ctx = session.mem.get_context()
+        score = 0.0
+        if ctx.get("asset_record"):
+            score += 0.25
+        if ctx.get("open_tickets"):
+            score += 0.15
+        # Only count episodic memory if there is a genuinely similar precedent.
+        if any(m.get("similarity", 0.0) >= 0.5 for m in (ctx.get("episodic_matches") or [])):
+            score += 0.20
+        if intent.get("confidence", 0) >= 0.7:
+            score += 0.20
+        anomaly = session.mem.get_agent_output("anomaly", {}) or {}
+        if anomaly.get("detected"):
+            score += 0.20
+        return round(min(1.0, score), 3)
+
     def _run(self, session) -> dict[str, Any]:
         e = session.event
         ctx = session.mem.get_context()
         intent = session.mem.get_state("intent", {}) or {}
         anomaly = session.mem.get_agent_output("anomaly", {}) or {}
         primary = intent.get("primary_intent", "routine_inquiry")
+
+        # Relevance gate: critically low relevance → ask for more info, force human review.
+        relevance = self._compute_relevance_score(session)
+        session.mem.set_state("relevance_score", relevance)
+        if relevance < 0.20:
+            session.mem.set_state("force_human_review", True)
+            session.mem.set_state("low_relevance", True)
+            fallback = Candidate(
+                action_type="gather_more_information",
+                description=("Insufficient context to make a confident recommendation. Please provide "
+                             "more detail: asset ID, observed symptoms, and urgency."),
+                priority_score=0.3, confidence=0.3, estimated_impact="LOW",
+                estimated_duration="immediate", template_derived=True,
+            )
+            session.mem.set_candidates([fallback.model_dump()])
+            self._confidence = 0.3
+            return {"candidates": [("gather_more_information", 0.3)], "low_relevance": True,
+                    "relevance_score": relevance}
 
         templates = self.domain.action_templates(primary, anomaly.get("anomaly_type"))
         candidates: list[Candidate] = []
@@ -43,9 +80,16 @@ class RecommendationAgent(Agent):
                 seen[c.action_type] = c
         ranked = sorted(seen.values(), key=lambda c: c.priority_score, reverse=True)[:5]
 
+        # Scale confidence/priority by relevance so weakly-grounded cases never look over-confident.
+        factor = 0.5 + 0.5 * relevance
+        for c in ranked:
+            c.confidence = round(c.confidence * factor, 3)
+            c.priority_score = round(c.priority_score * factor, 3)
+
         session.mem.set_candidates([c.model_dump() for c in ranked])
         self._confidence = ranked[0].confidence if ranked else 0.0
-        return {"candidates": [(c.action_type, round(c.priority_score, 2)) for c in ranked]}
+        return {"candidates": [(c.action_type, round(c.priority_score, 2)) for c in ranked],
+                "relevance_score": relevance}
 
     # ---- enrichment steps -----------------------------------------------
     def _apply_episodic_precedent(self, ctx, candidates) -> None:

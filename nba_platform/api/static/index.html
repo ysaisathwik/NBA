@@ -3,266 +3,423 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Intelligent NBA Platform — Command Centre</title>
+<title>Intelligent NBA Platform</title>
 <style>
   :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e;
-          --blue:#388bfd; --green:#3fb950; --amber:#d29922; --red:#f85149; --purple:#a371f7; }
+          --blue:#388bfd; --green:#3fb950; --amber:#d29922; --red:#f85149; --purple:#a371f7; --teal:#2dd4bf; }
   * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-         background:var(--bg); color:var(--text); }
-  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center;
-           justify-content:space-between; background:var(--panel); }
-  header h1 { font-size:16px; margin:0; font-weight:650; }
-  header h1 span { color:var(--blue); }
-  .metrics { display:flex; gap:18px; font-size:12px; color:var(--muted); }
-  .metrics b { color:var(--text); }
-
-  .dialogue { margin:16px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
-  .dialogue .row { display:flex; gap:10px; align-items:flex-end; }
-  .dialogue textarea { flex:1; background:#0d1117; color:var(--text); border:1px solid var(--line);
-           border-radius:8px; padding:12px; font:inherit; resize:vertical; min-height:64px; }
-  .dialogue button { white-space:nowrap; }
-  #matched { margin-top:10px; font-size:12px; color:var(--muted); display:none; }
-
-  .wrap { display:grid; grid-template-columns:240px 1fr 380px; gap:16px; padding:0 16px 16px; height:calc(100vh - 230px); }
-  .col { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:auto; }
-  .col h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
-            margin:0; padding:12px 14px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); }
-  .pad { padding:12px 14px; }
-  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:#21262d; color:var(--text);
-           border-radius:6px; padding:8px 12px; text-align:left; margin-bottom:8px; }
+  body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); }
+  a { color:var(--blue); }
+  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:#21262d; color:var(--text); border-radius:6px; padding:8px 12px; }
   button:hover { border-color:var(--blue); }
-  button.full { width:100%; }
-  button.primary { background:var(--blue); border-color:var(--blue); text-align:center; font-weight:600; }
-  button.green { background:var(--green); border-color:var(--green); text-align:center; color:#04130a; font-weight:600; }
-  button.red { background:transparent; border-color:var(--red); color:var(--red); text-align:center; }
-  textarea#mod { width:100%; background:#0d1117; color:var(--text); border:1px solid var(--line);
-           border-radius:6px; padding:7px; margin-bottom:8px; font:inherit; }
+  button.primary { background:var(--blue); border-color:var(--blue); font-weight:600; }
+  button.green { background:var(--green); border-color:var(--green); color:#04130a; font-weight:600; }
+  button.red { background:transparent; border-color:var(--red); color:var(--red); }
+  input, textarea { width:100%; background:#0d1117; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:9px; font:inherit; }
+  label { font-size:11px; color:var(--muted); display:block; margin:8px 0 3px; }
 
-  .step { padding:8px 14px; border-bottom:1px solid #21262d; display:flex; gap:10px; align-items:baseline; }
-  .step .n { color:var(--muted); font-variant-numeric:tabular-nums; min-width:22px; }
-  .step .st { font-size:10px; text-transform:uppercase; color:var(--purple); min-width:120px; }
-  .step .ti { font-weight:600; } .step .de { color:var(--muted); font-size:12px; }
+  /* login */
+  #login { max-width:420px; margin:8vh auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:28px; }
+  #login h1 { font-size:20px; margin:0 0 4px; } #login h1 span { color:var(--blue); }
+  #login p.sub { color:var(--muted); margin:0 0 20px; font-size:13px; }
+  .demo { margin-top:18px; font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:12px; }
+  .demo code { color:var(--text); cursor:pointer; } .demo div { padding:2px 0; }
+  #login-error { color:var(--red); font-size:13px; min-height:18px; margin-top:8px; }
 
-  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; margin:2px 4px 2px 0; }
+  /* header */
+  header { display:none; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--panel); align-items:center; justify-content:space-between; }
+  header h1 { font-size:15px; margin:0; font-weight:650; } header h1 span { color:var(--blue); }
+  .hdr-right { display:flex; align-items:center; gap:14px; }
+  .metrics { display:flex; gap:14px; font-size:12px; color:var(--muted); } .metrics b { color:var(--text); }
+  .rolebadge { padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700; }
+  .r-manager{background:rgba(210,153,34,.18);color:var(--amber);} .r-operator{background:rgba(56,139,253,.18);color:var(--blue);}
+  .r-engineer{background:rgba(63,185,80,.18);color:var(--green);} .r-customer{background:rgba(45,212,191,.18);color:var(--teal);}
+  .r-admin{background:rgba(163,113,247,.18);color:var(--purple);}
+
+  /* dashboards */
+  #app { display:none; padding:16px; }
+  .dialogue { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:16px; }
+  .dialogue .row { display:flex; gap:10px; align-items:flex-end; }
+  .dialogue textarea { min-height:60px; resize:vertical; }
+  #dialogue-error, #matched { font-size:13px; margin-top:8px; }
+  #dialogue-error { color:var(--red); display:none; } #matched { color:var(--muted); display:none; }
+
+  .grid { display:grid; gap:16px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0; padding:11px 14px; border-bottom:1px solid var(--line); }
+  .panel .body { padding:12px 14px; max-height:46vh; overflow:auto; }
+  .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px; }
+  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; text-align:center; }
+  .kpi .v { font-size:24px; font-weight:700; } .kpi .l { font-size:11px; color:var(--muted); text-transform:uppercase; }
+
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--line); }
+  td { padding:7px 8px; border-bottom:1px solid #21262d; }
+  tr:hover td { background:#1c2230; }
+
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; margin:1px 3px 1px 0; }
   .b-blue{background:rgba(56,139,253,.15);color:var(--blue);} .b-green{background:rgba(63,185,80,.15);color:var(--green);}
   .b-amber{background:rgba(210,153,34,.15);color:var(--amber);} .b-red{background:rgba(248,81,73,.15);color:var(--red);}
   .b-purple{background:rgba(163,113,247,.15);color:var(--purple);}
   .agent-anomaly{background:rgba(248,81,73,.15);color:var(--red);} .agent-knowledge{background:rgba(63,185,80,.15);color:var(--green);}
   .agent-risk{background:rgba(210,153,34,.15);color:var(--amber);} .agent-explainability{background:rgba(163,113,247,.15);color:var(--purple);}
 
-  .rec { border:1px solid var(--line); border-radius:8px; padding:11px; margin:10px 14px; }
+  /* case detail */
+  .step { padding:7px 0; border-bottom:1px solid #21262d; display:flex; gap:9px; align-items:baseline; animation:slideIn .2s ease; }
+  @keyframes slideIn { from { opacity:0; transform:translateX(-10px);} to { opacity:1; transform:none;} }
+  .step .n { color:var(--muted); min-width:20px; font-variant-numeric:tabular-nums; }
+  .step .st { font-size:10px; text-transform:uppercase; color:var(--purple); min-width:110px; }
+  .step .de { color:var(--muted); font-size:12px; }
+  .rec { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:9px; }
   .rec.sel { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
-  .rec h3 { margin:0 0 4px; font-size:14px; display:flex; justify-content:space-between; }
-  .rec .desc { color:var(--muted); font-size:12.5px; margin-bottom:6px; }
-  .rec .meta { font-size:11px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; }
-  .rec .rationale { font-size:12px; margin-top:6px; padding-top:6px; border-top:1px dashed #21262d; color:#c9d1d9; }
-  .risk-bar { display:flex; gap:3px; margin-top:6px; }
-  .risk-bar span { height:5px; border-radius:3px; flex:1; background:#21262d; position:relative; overflow:hidden; }
-  .risk-bar span i { position:absolute; inset:0; transform-origin:left; }
-
-  .bubble { background:#1c2433; border:1px solid var(--blue); border-radius:12px 12px 12px 2px;
-            padding:12px 14px; margin:10px 14px; }
-  .bubble .who { font-size:11px; color:var(--blue); font-weight:600; margin-bottom:4px; }
-  .bubble .q { font-size:14px; }
-  .empty { color:var(--muted); padding:20px 14px; text-align:center; font-size:13px; }
-  .pill { font-size:11px; color:var(--muted); }
+  .rec h3 { margin:0 0 3px; font-size:13.5px; display:flex; justify-content:space-between; }
+  .rec .desc { color:var(--muted); font-size:12px; margin-bottom:5px; }
+  .rec .rationale { font-size:12px; margin-top:5px; padding-top:5px; border-top:1px dashed #21262d; color:#c9d1d9; }
+  .risk-bar { display:flex; gap:3px; margin-top:6px; } .risk-bar span{height:6px;border-radius:3px;flex:1;background:#21262d;position:relative;overflow:hidden;}
+  .risk-bar span i{position:absolute;inset:0;transform-origin:left;}
+  .risk-legend { font-size:10px; color:var(--muted); margin-top:3px; letter-spacing:.3em; }
+  .spark { display:inline-flex; gap:2px; align-items:flex-end; height:18px; vertical-align:middle; }
+  .spark span { width:5px; background:var(--blue); border-radius:1px; }
+  .bubble { background:#1c2433; border:1px solid var(--blue); border-radius:12px 12px 12px 2px; padding:11px 13px; margin:9px 0; }
+  .bubble .who { font-size:11px; color:var(--blue); font-weight:600; margin-bottom:3px; }
+  .relbar { height:8px; border-radius:5px; background:#21262d; overflow:hidden; margin-top:4px; }
+  .relbar i { display:block; height:100%; }
+  .empty { color:var(--muted); text-align:center; padding:18px; font-size:13px; }
+  .progress { display:flex; gap:4px; margin-top:6px; } .progress div{flex:1;height:6px;border-radius:3px;background:#21262d;}
+  .copybtn { background:none; border:none; cursor:pointer; padding:2px 4px; font-size:12px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Intelligent <span>Next Best Action</span> Platform — Command Centre</h1>
-  <div class="metrics" id="metrics"></div>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <h1>Intelligent <span>NBA</span> Platform</h1>
+  <p class="sub">Agentic Decision Intelligence — sign in to your role dashboard</p>
+  <label>Email</label><input id="li-email" value="manager@energy.com" />
+  <label>Password</label><input id="li-pass" type="password" value="manager123" onkeydown="if(event.key==='Enter')doLogin()" />
+  <div id="login-error"></div>
+  <button class="primary" style="width:100%;margin-top:12px" onclick="doLogin()">Sign in</button>
+  <div class="demo">
+    <div style="margin-bottom:6px">Demo accounts (click to fill):</div>
+    <div><code onclick="fill('manager@energy.com','manager123')">manager@energy.com / manager123</code> — approves P1/P2</div>
+    <div><code onclick="fill('operator@energy.com','operator123')">operator@energy.com / operator123</code> — triggers + P3/P4</div>
+    <div><code onclick="fill('engineer@energy.com','engineer123')">engineer@energy.com / engineer123</code> — work orders (read-only)</div>
+    <div><code onclick="fill('customer@energy.com','customer123')">customer@energy.com / customer123</code> — complaints + status</div>
+    <div><code onclick="fill('admin@energy.com','admin123')">admin@energy.com / admin123</code> — everything + audit</div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<header id="header">
+  <h1>Intelligent <span>Next Best Action</span> Platform</h1>
+  <div class="hdr-right">
+    <div class="metrics" id="metrics"></div>
+    <span id="rolebadge" class="rolebadge"></span>
+    <button onclick="signOut()">Sign out</button>
+  </div>
 </header>
-
-<!-- Item 1: full-width conversational dialogue box -->
-<div class="dialogue">
-  <div class="row">
-    <textarea id="dlg" placeholder="Describe your problem in plain English — e.g. 'The TR-441 transformer temperature is rising fast and we have 2400 customers affected'"></textarea>
-    <button class="primary" onclick="submitDialogue()">Submit</button>
-  </div>
-  <div id="matched"></div>
-</div>
-
-<div class="wrap">
-  <div class="col">
-    <h2>Preset scenarios</h2>
-    <div class="pad" id="scenarios"></div>
-  </div>
-
-  <div class="col">
-    <h2>Live agent trace <span id="state-badge"></span></h2>
-    <div id="trace"><div class="empty">Describe a problem above (or pick a preset) to begin.</div></div>
-  </div>
-
-  <div class="col">
-    <h2>Recommendations &amp; Human review</h2>
-    <div id="review"><div class="empty">No active case.</div></div>
-  </div>
-</div>
+<div id="app"></div>
 
 <script>
-let activeSid = null, selectedAction = null, pollTimer = null;
+const ROLE_RANK = {admin:1, manager:2, operator:3, engineer:4, customer:5};
+let ME = null, CURSID = null, POLL = null;
 
-async function api(path, opts) { const r = await fetch(path, opts); return r.json(); }
+function token() { return localStorage.getItem('nba_token'); }
+async function api(path, opts={}) {
+  const r = await fetch(path, {headers:{'Authorization':'Bearer '+token(),'Content-Type':'application/json'}, ...opts});
+  if (r.status === 401) { signOut(); return {}; }
+  return r;
+}
+async function apiJSON(path, opts={}) { const r = await api(path, opts); return r.json ? r.json() : r; }
 
-async function loadMetrics() {
-  const m = await api('/api/metrics');
+function fill(e,p){ document.getElementById('li-email').value=e; document.getElementById('li-pass').value=p; }
+
+async function doLogin() {
+  const email=document.getElementById('li-email').value, password=document.getElementById('li-pass').value;
+  const r = await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+  if (!r.ok) { document.getElementById('login-error').textContent='Invalid credentials'; return; }
+  const d = await r.json();
+  localStorage.setItem('nba_token', d.token);
+  localStorage.setItem('nba_role', d.role);
+  localStorage.setItem('nba_name', d.name);
+  boot();
+}
+function signOut(){ localStorage.clear(); if(POLL)clearInterval(POLL); location.reload(); }
+
+async function boot() {
+  const t = token();
+  if (!t) { show('login'); return; }
+  const me = await apiJSON('/api/auth/me');
+  if (!me || !me.role) { signOut(); return; }
+  ME = me;
+  document.getElementById('login').style.display='none';
+  document.getElementById('header').style.display='flex';
+  document.getElementById('app').style.display='block';
+  const rb = document.getElementById('rolebadge');
+  rb.className = 'rolebadge r-'+me.role; rb.textContent = me.role.toUpperCase()+' · '+me.name;
+  if (['manager','operator','admin'].includes(me.role)) refreshMetrics(); else document.getElementById('metrics').innerHTML='';
+  renderDashboard();
+  if (POLL) clearInterval(POLL);
+  POLL = setInterval(tick, 1200);
+}
+function show(id){ ['login'].forEach(x=>document.getElementById(x).style.display = x===id?'block':'none'); }
+
+async function refreshMetrics() {
+  const m = await apiJSON('/api/metrics'); if (!m || !m.llm_mode) return;
   document.getElementById('metrics').innerHTML =
-    `LLM <b>${m.llm_mode}</b> · episodic <b>${m.episodic_cases}</b> · vectors <b>${m.vector_chunks}</b> · ` +
-    `patterns <b>${m.learning_patterns}</b> · audit <b>${m.audit_entries}</b> · cases <b>${m.sessions}</b>`;
+    `store <b>${m.store_backend}</b> · LLM <b>${m.llm_mode}</b> · cases <b>${m.sessions}</b> · `+
+    `auto-approve <b>${m.auto_approve_rate_pct}%</b> · patterns <b>${m.learning_patterns}</b>`;
 }
 
-async function loadScenarios() {
-  const s = await api('/api/scenarios');
-  document.getElementById('scenarios').innerHTML = s.map((x,i)=>
-    `<button class="full" onclick='runScenario(${i})'>${x.label}</button>`).join('');
-  window._scenarios = s;
-}
-async function runScenario(i) { await startEvent(window._scenarios[i].event); }
-
-function agentBadges(list) {
-  return (list||[]).map(a => `<span class="badge agent-${a} b-blue">${a}</span>`).join('');
-}
-
-// Item 2/3: free-text dialogue → parsed event → matched agents
-async function submitDialogue() {
-  const text = document.getElementById('dlg').value.trim();
-  if (!text) return;
-  const r = await api('/api/dialogue', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({raw_dialogue: text})});
-  const ex = r.extracted_event || {};
-  const md = document.getElementById('matched');
-  md.style.display = 'block';
-  md.innerHTML = `Parsed → <b>${ex.event_type}</b> · severity <b>${ex.severity}</b>` +
-    (ex.asset_id?` · asset <b>${ex.asset_id}</b>`:'') +
-    (ex.customer_count?` · ${ex.customer_count} customers`:'') +
-    `<div style="margin-top:6px">Matched agents: ${agentBadges(r.matched_agents)}</div>`;
-  beginPolling(r.session_id);
+// ---------- dashboards ----------
+function renderDashboard() {
+  const app = document.getElementById('app');
+  const r = ME.role;
+  if (r==='manager'||r==='admin') app.innerHTML = managerHTML(r==='admin');
+  else if (r==='operator') app.innerHTML = operatorHTML();
+  else if (r==='engineer') app.innerHTML = engineerHTML();
+  else if (r==='customer') app.innerHTML = customerHTML();
+  tick();
 }
 
-async function startEvent(event) {
-  const r = await api('/api/events', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(event)});
-  document.getElementById('matched').style.display = 'none';
-  beginPolling(r.session_id);
+function managerHTML(isAdmin) {
+  return `
+  <div class="kpis" id="kpis"></div>
+  <div class="grid" style="grid-template-columns:1.4fr 1fr">
+    <div class="panel"><h2>Active cases</h2><div class="body" id="cases"></div></div>
+    <div class="panel"><h2>Approval queue (needs you)</h2><div class="body" id="queue"></div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-top:16px">
+    <div class="panel"><h2>Case detail</h2><div class="body" id="detail"><div class="empty">Select a case.</div></div></div>
+    <div class="panel"><h2>${isAdmin?'Audit / all sessions':'Analytics'}</h2><div class="body" id="analytics"></div></div>
+  </div>`;
+}
+function operatorHTML() {
+  return `
+  <div class="dialogue">
+    <div class="row">
+      <textarea id="dlg" placeholder="Describe your problem in plain English — e.g. 'The TR-441 transformer temperature is rising fast and we have 2400 customers affected'"></textarea>
+      <button class="primary" onclick="submitDialogue()">Submit</button>
+    </div>
+    <div id="dialogue-error"></div><div id="matched"></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1.3fr">
+    <div>
+      <div class="panel" style="margin-bottom:16px"><h2>HITL queue (P3/P4)</h2><div class="body" id="queue"></div></div>
+      <div class="panel"><h2>My cases</h2><div class="body" id="cases"></div></div>
+    </div>
+    <div class="panel"><h2>Case detail</h2><div class="body" id="detail"><div class="empty">Submit a problem or open a case.</div></div></div>
+  </div>`;
+}
+function engineerHTML() {
+  return `
+  <div class="grid" style="grid-template-columns:1fr 1.3fr">
+    <div>
+      <div class="panel" style="margin-bottom:16px"><h2>Assigned work orders</h2><div class="body" id="workorders"></div></div>
+      <div class="panel"><h2>Asset health</h2><div class="body" id="assets"></div></div>
+    </div>
+    <div class="panel"><h2>Case detail (read-only)</h2><div class="body" id="detail"><div class="empty">Open a work order's case.</div></div></div>
+  </div>`;
+}
+function customerHTML() {
+  return `
+  <div class="dialogue">
+    <div class="row">
+      <textarea id="dlg" placeholder="Describe your service issue — e.g. 'My power keeps going out and my last invoice looks wrong'"></textarea>
+      <button class="primary" onclick="submitDialogue()">Submit complaint</button>
+    </div>
+    <div id="dialogue-error"></div><div id="matched"></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1.3fr">
+    <div class="panel"><h2>My service cases</h2><div class="body" id="cases"></div></div>
+    <div class="panel"><h2>Status</h2><div class="body" id="detail"><div class="empty">Open one of your cases.</div></div></div>
+  </div>`;
 }
 
-function beginPolling(sid) {
-  activeSid = sid; selectedAction = null;
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(poll, 900);
-  poll();
+// ---------- periodic refresh ----------
+async function tick() {
+  if (!ME) return;
+  if (['manager','operator','admin'].includes(ME.role)) refreshMetrics();
+  const all = ['manager','operator','admin'].includes(ME.role)
+      ? await apiJSON('/api/sessions') : await apiJSON('/api/my-cases');
+  const sessions = Array.isArray(all) ? all : [];
+  if (ME.role==='manager'||ME.role==='admin') { renderKpis(sessions); renderCases(sessions); renderQueue(sessions); renderAnalytics(sessions); }
+  else if (ME.role==='operator') { renderCases(sessions); renderQueue(sessions); }
+  else if (ME.role==='engineer') { renderWorkOrders(sessions); renderAssets(); }
+  else if (ME.role==='customer') { renderCases(sessions); }
+  if (CURSID) renderDetail();
 }
 
-const stateClass = s => ({RESOLVED:'b-green',CLOSED:'b-green',ESCALATED:'b-red',PARTIAL_RESOLVE:'b-amber',
-  HUMAN_REVIEW:'b-amber',VERIFYING:'b-amber',REPLANNING:'b-purple'}[s] || 'b-blue');
+function fmtState(s){ const c={RESOLVED:'b-green',CLOSED:'b-green',ESCALATED:'b-red',PARTIAL_RESOLVE:'b-amber',HUMAN_REVIEW:'b-amber',VERIFYING:'b-amber',REPLANNING:'b-purple'}[s]||'b-blue'; return `<span class="badge ${c}">${s}</span>`; }
 
-async function poll() {
-  if (!activeSid) return;
-  const snap = await api('/api/sessions/' + activeSid);
-  loadMetrics();
-  document.getElementById('state-badge').innerHTML =
-    `<span class="badge ${stateClass(snap.state)}">${snap.state}</span>`;
-  renderTrace(snap.trace || []);
-  renderReview(snap);
-  if (snap.state === 'CLOSED' && !snap.awaiting_human && !snap.awaiting_feedback) {
-    clearInterval(pollTimer); pollTimer = null;
-  }
+function renderKpis(s){ const el=document.getElementById('kpis'); if(!el)return;
+  const total=s.length, resolved=s.filter(x=>['CLOSED','RESOLVED'].includes(x.state)).length;
+  const pending=s.filter(x=>x.awaiting_human).length;
+  el.innerHTML = [['Total cases',total],['Resolved',resolved],['Pending HITL',pending],
+    ['In progress',total-resolved],['Roles','5']].map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
 }
-
-function renderTrace(trace) {
-  const el = document.getElementById('trace');
-  if (!trace.length) { el.innerHTML = '<div class="empty">Starting…</div>'; return; }
-  el.innerHTML = trace.map(s => `
-    <div class="step"><span class="n">${s.step}</span><span class="st">${s.state}</span>
-      <span><span class="ti">${s.title}</span> ${s.detail?`<span class="de">— ${s.detail}</span>`:''}</span>
-    </div>`).join('');
-  el.scrollTop = el.scrollHeight;
+function renderCases(s){ const el=document.getElementById('cases'); if(!el)return;
+  if(!s.length){el.innerHTML='<div class="empty">No cases yet.</div>';return;}
+  el.innerHTML = `<table><tr><th>Type</th><th>Sev</th><th>State</th><th>Asset</th><th></th></tr>`+
+    s.map(x=>`<tr><td>${x.event_type||(x.event&&x.event.type)||'-'}</td><td>${x.severity||(x.event&&x.event.severity)||'-'}</td>
+      <td>${fmtState(x.state)}</td><td>${x.asset_id||(x.event&&x.event.asset_id)||'-'}</td>
+      <td><button onclick="openCase('${x.session_id}')">View</button></td></tr>`).join('')+`</table>`;
 }
-
-function riskBar(risk) {
-  if (!risk) return '';
-  const dims = ['safety','financial','compliance','reputational','operational'];
-  const col = v => v>=0.85?'#f85149':v>=0.6?'#d29922':v>=0.3?'#388bfd':'#3fb950';
-  return '<div class="risk-bar">' + dims.map(d=>{
-    const v = risk[d]||0;
-    return `<span title="${d} ${v}"><i style="background:${col(v)};transform:scaleX(${v})"></i></span>`;
-  }).join('') + '</div>';
-}
-
-function renderReview(snap) {
-  const el = document.getElementById('review');
-  const cands = snap.candidates || [];
-  const exps = {}; (snap.explanations||[]).forEach(e => exps[e.action_id]=e);
-  const review = snap.human_review || {};
-  if (!cands.length) { el.innerHTML = '<div class="empty">Awaiting recommendations…</div>'; return; }
-
-  let html = cands.map(c => {
-    const e = exps[c.id] || {};
-    const sel = c.id===selectedAction ? 'sel' : '';
-    return `<div class="rec ${sel}" onclick="selectAction('${c.id}')">
-      <h3><span>${c.action_type}</span><span class="pill">p ${c.priority_score.toFixed(2)} · c ${c.confidence.toFixed(2)}</span></h3>
-      <div class="desc">${c.description}</div>
-      <div class="meta"><span>impact ${c.estimated_impact}</span><span>eta ${c.estimated_duration}</span>
-        ${c.precedent_case?`<span>precedent ${c.precedent_case}</span>`:''}</div>
-      ${riskBar(c.risk)}
-      ${e.rationale?`<div class="rationale">${e.rationale}</div>`:''}
-    </div>`;
+function renderQueue(s){ const el=document.getElementById('queue'); if(!el)return;
+  const q=s.filter(x=>x.awaiting_human);
+  if(!q.length){el.innerHTML='<div class="empty">Nothing awaiting approval.</div>';return;}
+  el.innerHTML = q.map(x=>{
+    const req=x.required_role||'operator'; const canAct=ROLE_RANK[ME.role]<=ROLE_RANK[req];
+    return `<div class="rec"><h3><span>${x.event_type||(x.event&&x.event.type)}</span>${fmtState(x.state)}</h3>
+      <div class="desc">urgency ${x.urgency||'?'} · needs <b>${req}</b> approval</div>
+      <button class="${canAct?'primary':''}" onclick="openCase('${x.session_id}')">${canAct?'Review & approve':'View (no authority)'}</button></div>`;
   }).join('');
+}
+function renderAnalytics(s){ const el=document.getElementById('analytics'); if(!el)return;
+  el.innerHTML = `<table><tr><th>ID</th><th>State</th><th>Urgency</th></tr>`+
+    s.map(x=>`<tr><td><code>${x.session_id.slice(-6)}</code></td><td>${fmtState(x.state)}</td><td>${x.urgency||'-'}</td></tr>`).join('')+`</table>`;
+}
+async function renderWorkOrders(s){ const el=document.getElementById('workorders'); if(!el)return;
+  const rows=[];
+  for (const x of s.filter(c=>['EXECUTING','VERIFYING','RESOLVED','CLOSED','REPLANNING'].includes(c.state))) {
+    const snap = await apiJSON('/api/sessions/'+x.session_id);
+    const ex = snap.exec_result||{};
+    if (ex.work_order_id) rows.push({sid:x.session_id, wo:ex.work_order_id, asset:snap.event&&snap.event.asset_id, state:x.state});
+  }
+  el.innerHTML = rows.length ? `<table><tr><th>Work order</th><th>Asset</th><th>State</th><th></th></tr>`+
+    rows.map(r=>`<tr><td><code>${r.wo}</code></td><td>${r.asset||'-'}</td><td>${fmtState(r.state)}</td>
+      <td><button onclick="openCase('${r.sid}')">Open</button></td></tr>`).join('')+`</table>`
+    : '<div class="empty">No work orders assigned.</div>';
+}
+function renderAssets(){ const el=document.getElementById('assets'); if(!el)return;
+  el.innerHTML = `<table><tr><th>Asset</th><th>Type</th><th>Health</th></tr>
+    <tr><td>TR-441</td><td>transformer</td><td><span class="badge b-amber">0.62</span></td></tr>
+    <tr><td>TR-442</td><td>transformer</td><td><span class="badge b-green">0.88</span></td></tr></table>
+    <div class="empty" style="text-align:left">Health scores from the long-term store; live values appear in each case's context.</div>`;
+}
 
-  // Phase A: awaiting the human decision
-  if (snap.awaiting_human) {
-    if (!selectedAction) selectedAction = cands[0].id;
-    html += `<div class="pad">
-      <span class="badge b-amber">AWAITING HUMAN REVIEW</span>
-      <textarea id="mod" rows="2" placeholder="Modification / comment (optional)"></textarea>
-      <button class="green full" onclick="decide('approved')">Approve selected</button>
-      <button class="primary full" onclick="decide('modified')">Approve with modification</button>
-      <button class="red full" onclick="decide('rejected')">Reject</button>
-    </div>`;
+// ---------- dialogue ----------
+async function submitDialogue() {
+  const raw=document.getElementById('dlg').value.trim();
+  const err=document.getElementById('dialogue-error'); err.style.display='none';
+  if(!raw){ err.textContent='Please describe your problem.'; err.style.display='block'; return; }
+  const r = await fetch('/api/dialogue',{method:'POST',headers:{'Authorization':'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify({raw_dialogue:raw})});
+  const d = await r.json();
+  if (r.status===422 || d.rejected) { err.textContent=d.message; err.style.display='block'; return; }
+  const md=document.getElementById('matched'); md.style.display='block';
+  const ex=d.extracted_event||{};
+  md.innerHTML=`Parsed → <b>${ex.event_type}</b> · ${ex.severity}`+(ex.asset_id?` · <b>${ex.asset_id}</b>`:'')+
+    (ex.customer_count?` · ${ex.customer_count} customers`:'')+
+    `<div style="margin-top:5px">Matched agents: ${(d.matched_agents||[]).map(a=>`<span class="badge agent-${a} b-blue">${a}</span>`).join('')}</div>`;
+  openCase(d.session_id);
+}
+
+// ---------- case detail ----------
+function openCase(sid){ CURSID=sid; renderDetail(); }
+function copySid(){ navigator.clipboard.writeText(CURSID); }
+
+async function renderDetail() {
+  const el=document.getElementById('detail'); if(!el||!CURSID)return;
+  const snap = await apiJSON('/api/sessions/'+CURSID);
+  if (!snap || !snap.state) { el.innerHTML='<div class="empty">Loading…</div>'; return; }
+
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div>${fmtState(snap.state)} <span style="color:var(--muted);font-size:12px">${(snap.event&&snap.event.type)||''}</span>
+    <button class="copybtn" title="copy session id" onclick="copySid()">📋</button></div>
+    <span style="color:var(--muted);font-size:12px">cost $${(snap.total_cost_usd||0).toFixed(5)}</span></div>`;
+
+  // relevance indicator
+  if (snap.relevance_score!=null) {
+    const r=snap.relevance_score, col=r<0.3?'var(--red)':r<0.7?'var(--amber)':'var(--green)';
+    const lbl=r<0.3?'Low relevance — add more context':r<0.7?'Medium relevance':'High relevance';
+    html += `<div style="font-size:12px;color:var(--muted)">Relevance: ${Math.round(r*100)}% — ${lbl}
+      <div class="relbar"><i style="width:${Math.round(r*100)}%;background:${col}"></i></div></div>`;
   }
-  // Phase B: iterative feedback chat bubble (item 6)
-  else if (snap.awaiting_feedback && snap.followup_question) {
-    html += `<div class="bubble">
-        <div class="who">NBA assistant</div>
-        <div class="q">${snap.followup_question}</div>
-      </div>
-      <div class="pad">
-        <button class="green full" onclick="sendFeedback(true)">Yes, resolved</button>
-        <button class="red full" onclick="sendFeedback(false)">No, still an issue</button>
-      </div>`;
+
+  // customer status tracker
+  if (ME.role==='customer') {
+    const order=['INITIATED','CONTEXT_LOADED','EXECUTING','VERIFYING','RESOLVED','CLOSED'];
+    const idx=Math.max(order.indexOf(snap.state),0);
+    html += `<div class="progress">`+order.map((s,i)=>`<div style="background:${i<=idx?'var(--green)':'#21262d'}"></div>`).join('')+`</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${snap.state}</div>`;
+  } else {
+    // live trace (animated)
+    html += `<div style="margin:8px 0;max-height:30vh;overflow:auto">`+
+      (snap.trace||[]).slice(-40).map(s=>`<div class="step"><span class="n">${s.step}</span><span class="st">${s.state}</span>
+        <span><b>${s.title}</b> ${s.detail?`<span class="de">— ${s.detail}</span>`:''}</span></div>`).join('')+`</div>`;
+    // confidence decay sparkline
+    const decays=(snap.trace||[]).filter(s=>s.title&&s.title.includes('Confidence decay')).length;
+    if (decays>0) { const base=(snap.candidates&&snap.candidates[0]?snap.candidates[0].confidence:0.9);
+      let bars=''; for(let i=0;i<=decays;i++){ const v=base*Math.pow(0.85,i); bars+=`<span style="height:${Math.max(3,v*18)}px"></span>`; }
+      html += `<div style="font-size:12px;color:var(--muted)">Confidence trajectory: <span class="spark">${bars}</span></div>`;
+    }
   }
-  // Phase C: decision recorded / outcome
-  else if (review.decision && review.decision!=='pending') {
-    const v = snap.verify || {};
-    html += `<div class="pad">
-      <span class="badge ${review.decision==='rejected'?'b-red':'b-green'}">Decision: ${review.decision}
-        ${review.auto_approved?'(auto)':''}${review.emergency_override?'(override)':''}</span>
-      <div class="pill" style="margin-top:8px">${review.comments||''}</div>
-      ${snap.followup_question?`<div class="bubble" style="margin-left:0"><div class="who">NBA assistant</div><div class="q">${snap.followup_question}</div></div>`:''}
-      ${v.resolved!==undefined?`<div class="pill" style="margin-top:8px">Verification:
-        ${v.resolved?'✓ resolved':(v.partial_resolve?'~ partial':'✗ not resolved')} — ${v.reason||''}</div>`:''}
-    </div>`;
-  }
+
+  html += renderReco(snap);
   el.innerHTML = html;
 }
 
-function selectAction(id) { selectedAction = id; poll(); }
-
-async function decide(decision) {
-  const mod = (document.getElementById('mod')||{}).value || '';
-  await api('/api/sessions/'+activeSid+'/decision', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({decision, selected_action:selectedAction, modifications: mod?[mod]:[], comments: mod})});
-  poll();
+function riskBar(risk){ if(!risk)return'';
+  const dims=['safety','financial','compliance','reputational','operational'];
+  const col=v=>v>=0.85?'#f85149':v>=0.6?'#d29922':v>=0.3?'#388bfd':'#3fb950';
+  return `<div class="risk-bar">`+dims.map(d=>{const v=risk[d]||0; const lvl=v>=0.85?'CRITICAL':v>=0.6?'HIGH':v>=0.3?'MED':'LOW';
+    return `<span title="${d}: ${v} (${lvl})"><i style="background:${col(v)};transform:scaleX(${v})"></i></span>`;}).join('')+
+    `</div><div class="risk-legend">S · F · C · R · O</div>`;
 }
 
-async function sendFeedback(resolved) {
-  await api('/api/sessions/'+activeSid+'/feedback', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({resolved})});
-  poll();
+function renderReco(snap) {
+  const cands=snap.candidates||[]; if(!cands.length) return '<div class="empty">Awaiting recommendations…</div>';
+  const exps={}; (snap.explanations||[]).forEach(e=>exps[e.action_id]=e);
+  const review=snap.human_review||{};
+  window._sel = window._sel || {};
+  if (!window._sel[snap.session_id]) window._sel[snap.session_id]=cands[0].id;
+  const sel=window._sel[snap.session_id];
+
+  let html = cands.map(c=>{ const e=exps[c.id]||{};
+    return `<div class="rec ${c.id===sel?'sel':''}" onclick="pick('${snap.session_id}','${c.id}')">
+      <h3><span>${c.action_type}</span><span style="color:var(--muted);font-size:11px">p ${(c.priority_score||0).toFixed(2)} · c ${(c.confidence||0).toFixed(2)}</span></h3>
+      <div class="desc">${c.description}</div>${riskBar(c.risk)}
+      ${e.rationale?`<div class="rationale">${e.rationale}</div>`:''}</div>`;}).join('');
+
+  // approval gating
+  const canApprove = ME.permissions && ME.permissions.can_approve;
+  const req=snap.required_role; const hasAuthority = !req || ROLE_RANK[ME.role]<=ROLE_RANK[req];
+  if (snap.awaiting_human) {
+    if (canApprove && hasAuthority) {
+      html += `<textarea id="mod" rows="2" placeholder="Modification / comment (optional)" style="margin:8px 0"></textarea>
+        <div style="display:flex;gap:8px">
+          <button class="green" onclick="decide('approved')">Approve</button>
+          <button class="primary" onclick="decide('modified')">Approve + modify</button>
+          <button class="red" onclick="decide('rejected')">Reject</button></div>`;
+    } else {
+      html += `<div class="badge b-amber" style="margin-top:8px">Awaiting <b>${req||'operator'}</b> approval — your role (${ME.role}) cannot approve this ${snap.routing?'('+(snap.routing.reason||'')+')':''}</div>`;
+    }
+  } else if (snap.awaiting_feedback && snap.followup_question) {
+    html += `<div class="bubble"><div class="who">NBA assistant</div><div>${snap.followup_question}</div></div>
+      <div style="display:flex;gap:8px"><button class="green" onclick="feedback(true)">Yes, resolved</button>
+      <button class="red" onclick="feedback(false)">No, still an issue</button></div>`;
+  } else if (review.decision && review.decision!=='pending') {
+    const v=snap.verify||{};
+    html += `<div class="badge ${review.decision==='rejected'?'b-red':'b-green'}" style="margin-top:8px">
+      ${review.decision}${review.auto_approved?' (auto)':''}${review.approved_by_name?(' · by '+review.approved_by_name):''}</div>
+      ${v.resolved!==undefined?`<div style="font-size:12px;color:var(--muted);margin-top:6px">Verification: ${v.resolved?'✓ resolved':(v.partial_resolve?'~ partial':'✗ not resolved')}</div>`:''}`;
+  }
+  return html;
 }
 
-loadMetrics(); loadScenarios();
+function pick(sid,id){ window._sel[sid]=id; renderDetail(); }
+async function decide(decision){
+  const mod=(document.getElementById('mod')||{}).value||'';
+  const r=await api('/api/sessions/'+CURSID+'/decision',{method:'POST',body:JSON.stringify({decision,selected_action:window._sel[CURSID],modifications:mod?[mod]:[],comments:mod})});
+  if (r.status===403){ alert((await r.json()).detail); return; }
+  renderDetail();
+}
+async function feedback(resolved){
+  await api('/api/sessions/'+CURSID+'/feedback',{method:'POST',body:JSON.stringify({resolved})});
+  renderDetail();
+}
+
+boot();
 </script>
 </body>
 </html>

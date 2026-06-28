@@ -6,7 +6,7 @@ from typing import Any, Callable
 from .config import Settings, get_settings
 from .domain import load_domain, seed_domain
 from .llm import get_llm
-from .memory.longterm import LongTermStore
+from .memory.factory import build_store
 from .memory.working import SessionMemory, WorkingMemory
 from .schemas import CaseState, Event, new_id, utcnow
 from .tools import build_registry
@@ -19,7 +19,7 @@ class Platform:
     def __init__(self, settings: Settings | None = None, seed: bool = True) -> None:
         self.settings = settings or get_settings()
         self.working = WorkingMemory()
-        self.store = LongTermStore(self.settings.db_path)
+        self.store = build_store(self.settings)
         self.sims = Simulators()
         self.domain = load_domain(self.settings.domain)
         self.tools = build_registry(self.store, self.sims, self.domain)
@@ -52,6 +52,7 @@ class Session:
         self.goal = goal or f"Resolve {event.type} on {event.asset_id or 'target'} and prevent escalation"
         self.iteration = 0
         self.result: dict[str, Any] | None = None  # snapshot captured before Redis flush
+        self.total_cost: float = 0.0  # accumulated estimated LLM/agent cost
 
         self.mem.set_state("event", event.model_dump())
         self.mem.set_state("goal", self.goal)
@@ -111,9 +112,14 @@ class Session:
 
     def record_agent(self, result) -> None:
         self.mem.set_agent(result.name, result.as_dict())
+        self.total_cost = round(self.total_cost + getattr(result, "estimated_cost_usd", 0.0), 6)
         self.log(
-            f"{result.name} agent", detail=f"{result.status} · conf={result.confidence} · {result.latency_ms}ms",
-            data={"mode": result.mode, "tool_calls": [c.get("tool") for c in result.tool_calls]},
+            f"{result.name} agent",
+            detail=f"{result.status} · conf={result.confidence} · {result.latency_ms}ms · "
+                   f"${result.estimated_cost_usd:.5f}",
+            data={"mode": result.mode, "latency_ms": result.latency_ms,
+                  "cost_usd": result.estimated_cost_usd,
+                  "tool_calls": [c.get("tool") for c in result.tool_calls]},
             agent=result.name,
         )
 
@@ -128,6 +134,11 @@ class Session:
             "extracted_event": self.mem.get_blob("extracted_event"),
             "matched_agents": self.mem.get_state("matched_agents", []),
             "followup_question": self.mem.get_blob("followup_question"),
+            "relevance_score": self.mem.get_state("relevance_score"),
+            "low_relevance": bool(self.mem.get_state("low_relevance")),
+            "required_role": self.mem.get_state("required_role"),
+            "routing": self.mem.get_blob("routing"),
+            "total_cost_usd": round(self.total_cost, 6),
             "candidates": self.mem.get_candidates(),
             "explanations": self.mem.get_blob("explanations", []),
             "context": self.mem.get_context(),

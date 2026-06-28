@@ -178,6 +178,16 @@ class Orchestrator:
             session.iteration = iteration
             session.mem.set_state("iteration", iteration)
             session.set_state(CaseState.REPLANNING)
+
+            # Confidence decay: stale recommendations must not look falsely confident (5b).
+            candidates = session.mem.get_candidates()
+            for c in candidates:
+                c["confidence"] = round(c.get("confidence", 0.0) * 0.85, 3)
+                c["priority_score"] = round(c.get("priority_score", 0.0) * 0.90, 3)
+            session.mem.set_candidates(candidates)
+            session.log("Confidence decay applied",
+                        detail=f"iteration {iteration}: 15% confidence reduction on remaining candidates")
+
             decision = self.platform.agent("planner").replan(session, verify)
             session.log(f"Goal loop — replan (iteration {iteration})",
                         detail=decision.get("reason"), data=decision)

@@ -76,6 +76,39 @@ Key endpoints: `POST /api/dialogue` (free-text → event + matched agents),
 `POST /api/events` (structured event), `POST /api/sessions/{sid}/decision` (HITL decision),
 `POST /api/sessions/{sid}/feedback` (`{resolved: true|false}` iterative loop).
 
+### Sign in with a role (multi-role dashboards)
+The UI opens on a **login screen**. Pick a demo account to see its dashboard:
+
+| Email | Password | Role | Dashboard |
+|---|---|---|---|
+| manager@energy.com | manager123 | manager | KPIs, all cases, **approval queue (P1/P2)**, analytics |
+| operator@energy.com | operator123 | operator | dialogue box, my cases, **HITL queue (P3/P4)** |
+| engineer@energy.com | engineer123 | engineer | assigned work orders, asset health (read-only) |
+| customer@energy.com | customer123 | customer | my service cases + status tracker, file a complaint |
+| admin@energy.com | admin123 | admin | everything + audit |
+
+**Guardrails:** nonsense / "No problem" / out-of-domain input is rejected (422) with a helpful
+message — no session starts. **Tiered approval:** P1/P2 require **manager+**; an operator
+approving a P1 gets a 403. **Auto-approve** only fires for P3/P4, low-risk, safety≈0,
+whitelisted actions. **Relevance gate:** weakly-grounded cases get a "gather more information"
+recommendation and forced human review; confidence is scaled by a relevance score (shown as a
+bar in the UI). Every agent step shows **latency + estimated cost**; confidence **decays 15%**
+per replan iteration.
+
+Auth is JWT (HS256) — see [`nba_platform/auth.py`](nba_platform/auth.py). Set `JWT_SECRET` in
+`.env` for production.
+
+### Using Supabase (optional)
+The long-term store defaults to SQLite. To use **Supabase / Postgres**:
+1. `pip install supabase`
+2. Run [`supabase_schema.sql`](supabase_schema.sql) in the Supabase SQL editor.
+3. Set `SUPABASE_URL` and `SUPABASE_KEY` in `.env`.
+
+The platform auto-detects both vars + the package and switches the store
+([`nba_platform/memory/factory.py`](nba_platform/memory/factory.py)); if anything is missing
+or unreachable it logs a warning and falls back to SQLite. `GET /api/metrics` reports the
+active `store_backend`.
+
 ### 3) Run the tests
 ```bash
 python -m pytest -q

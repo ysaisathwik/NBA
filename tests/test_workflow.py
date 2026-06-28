@@ -48,13 +48,47 @@ def test_lazy_selection_for_low_stakes_billing(orch):
 
 
 def test_auto_approve_path(orch, platform):
-    # Drive a P4 whitelisted, low-risk action to confirm auto-approve fires without a human.
+    # A P4 whitelisted, safety≈0 billing action auto-approves without a human.
     session = orch.run(Event(
-        type="maintenance_due", source_type="manual", asset_id="TR-442", severity="INFO",
-        raw_content="Scheduled preventive maintenance is due for transformer TR-442 per the maintenance plan and asset health review."))
+        type="billing_dispute", source_type="crm", customer_id="CUST-Northgate", severity="INFO",
+        raw_content="Customer billing dispute: please audit the meter data and issue a corrective invoice adjustment for the disputed charge."))
     review = session.result["human_review"]
     assert review["auto_approved"] is True
     assert review["decision"] == "approved"
+
+
+def test_p1_never_auto_approved(orch):
+    session = orch.run(transformer_event())
+    assert session.result["human_review"]["auto_approved"] is False
+    assert session.result["required_role"] == "manager"
+
+
+def test_low_relevance_yields_gather_more_information(platform):
+    # Construct a session with no grounding context → relevance gate fires.
+    ev = Event(type="customer_complaint", source_type="manual", severity="INFO",
+               raw_content="general complaint about service")
+    session = platform.new_session(ev)
+    platform.agent("context").run(session)
+    platform.agent("intent").run(session)
+    platform.agent("recommendation").run(session)
+    rel = session.mem.get_state("relevance_score")
+    assert rel is not None
+    if rel < 0.20:
+        assert session.mem.get_candidates()[0]["action_type"] == "gather_more_information"
+
+
+def test_confidence_decay_logged(orch):
+    session = orch.run(Event(
+        type="data_anomaly", source_type="scada", asset_id="WT-19", metric="blade_harmonic",
+        value=8.2, threshold=5.0, severity="WARNING",
+        raw_content="harmonic vibration anomaly on turbine WT-19 sensor"))
+    # this case escalates through replans → decay should have been applied at least once
+    assert any("Confidence decay" in s["title"] for s in session.trace)
+
+
+def test_agent_cost_tracked(orch):
+    session = orch.run(transformer_event())
+    assert session.result["total_cost_usd"] > 0
 
 
 def test_cold_start_blocks_auto_approve_and_caps_confidence(orch):

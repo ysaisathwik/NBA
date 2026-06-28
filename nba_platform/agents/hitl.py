@@ -48,24 +48,38 @@ class HITLAgent(Agent):
             self._confidence = top.get("confidence", 0.9)
             return {"decision": "approved", "auto_approved": True, "selected_action": top["action_type"]}
 
-        # Otherwise: awaiting human. Record routing + escalation plan.
+        # Otherwise: awaiting human. Record routing + escalation plan + required approver role.
         routing = self._routing(urgency)
+        session.mem.set_blob("routing", routing)
+        session.mem.set_state("required_role", routing["required_role"])
         session.mem.set_blob("human_review", HumanReview(decision="pending").model_dump())
         session.mem.set_state("awaiting_human", True)
         self._confidence = top.get("confidence", 0.0)
-        return {"decision": "pending", "auto_approved": False, "routing": routing}
+        return {"decision": "pending", "auto_approved": False, "routing": routing,
+                "required_role": routing["required_role"]}
 
     def _auto_approvable(self, session, top, risk_blob, urgency) -> bool:
+        """Auto-approve is ONLY eligible for P3/P4, low-risk, whitelisted, safety≈0 actions."""
+        from ..auth import AUTO_APPROVE_ROLES
+
         if session.mem.get_state("force_human_review") or session.mem.get_context().get("cold_start"):
             return False
+        # P1/P2 NEVER auto-approve regardless of confidence/risk — safety policy.
+        if urgency in {"P1", "P2"} or urgency not in AUTO_APPROVE_ROLES:
+            return False
         s = self.platform.settings
-        agg = risk_blob.get("aggregate", {})
+        agg = risk_blob.get("aggregate") or self._fallback_risk(session, top)
         dims_ok = all(agg.get(k, 1.0) <= s.auto_approve_risk
                       for k in ("financial", "safety", "compliance", "reputational", "operational"))
-        conf_ok = top.get("confidence", 0.0) >= s.auto_approve_confidence
-        urgency_ok = _URGENCY_RANK.get(urgency, 1) >= 3  # P3 or P4
+        # Evaluate the *grounded* confidence (undo the relevance scaling applied for display).
+        relevance = session.mem.get_state("relevance_score", 1.0) or 1.0
+        factor = 0.5 + 0.5 * relevance
+        base_conf = top.get("confidence", 0.0) / factor if factor > 0 else top.get("confidence", 0.0)
+        conf_ok = base_conf >= s.auto_approve_confidence
         whitelisted = top["action_type"] in self.domain.AUTO_APPROVE_WHITELIST
-        return dims_ok and conf_ok and urgency_ok and whitelisted
+        # Safety risk must be effectively zero for a no-human approval.
+        safety_ok = agg.get("safety", 1.0) <= 0.15
+        return dims_ok and conf_ok and whitelisted and safety_ok
 
     # ---- dynamic iterative feedback -------------------------------------
     def generate_followup(self, session, decision: dict[str, Any]) -> str:
@@ -110,10 +124,37 @@ class HITLAgent(Agent):
     def _default_followup(self, session, action_type: str) -> str:
         return f"Has the issue on {session.event.asset_id or 'the asset'} been resolved after {action_type}?"
 
+    def _fallback_risk(self, session, top) -> dict[str, float]:
+        """Deterministic risk for the top action when the Risk Agent was lazily skipped."""
+        intent = session.mem.get_state("intent", {}) or {}
+        asset = session.mem.get_context().get("asset_record") or {}
+        ctx = {"customer_impact_score": intent.get("customer_impact_score", 0.0),
+               "severity": session.event.severity, "hv": "HV" in str(asset.get("metadata", ""))}
+        try:
+            return self.domain.risk_for(top["action_type"], ctx)
+        except Exception:
+            return {k: 0.9 for k in ("financial", "safety", "compliance", "reputational", "operational")}
+
     def _routing(self, urgency: str) -> dict[str, Any]:
-        if urgency == "P1":
-            channels = ["operator_dashboard", "on_call_manager(SMS+Teams)", "field_engineer_lead(Teams)"]
-            return {"channels": channels, "sla_seconds": 180,
-                    "escalation_tiers": [("primary_operator", 180), ("on_call_manager", 300), ("emergency_contact", 600)]}
-        return {"channels": ["operator_dashboard"], "sla_seconds": {"P2": 900, "P3": 3600, "P4": 14400}.get(urgency, 3600),
-                "escalation_tiers": [("primary_operator", 900)]}
+        from ..auth import HITL_APPROVAL_MATRIX
+
+        required_role = HITL_APPROVAL_MATRIX.get(urgency, "operator")
+        routing_by_urgency = {
+            "P1": {"required_role": required_role,
+                   "channels": ["manager_dashboard", "on_call_manager(SMS+Teams)", "field_engineer_lead(Teams)"],
+                   "sla_seconds": 180,
+                   "escalation_tiers": [("manager", 180), ("admin", 300), ("emergency_override", 600)],
+                   "reason": "Safety-critical action requires manager+ approval"},
+            "P2": {"required_role": required_role,
+                   "channels": ["manager_dashboard", "operator_dashboard"],
+                   "sla_seconds": 900,
+                   "escalation_tiers": [("manager", 900), ("admin", 1800)],
+                   "reason": "High-impact action requires manager+ approval"},
+        }
+        if urgency in routing_by_urgency:
+            return routing_by_urgency[urgency]
+        return {"required_role": required_role,
+                "channels": ["operator_dashboard"],
+                "sla_seconds": {"P3": 3600, "P4": 14400}.get(urgency, 3600),
+                "escalation_tiers": [("operator", 3600)],
+                "reason": "Operator-level approval sufficient for this urgency"}

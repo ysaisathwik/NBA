@@ -17,6 +17,7 @@ class AgentResult:
     status: str = "completed"  # completed | failed | timeout | skipped
     latency_ms: int = 0
     mode: str = "tool"  # tool | llm | fallback
+    estimated_cost_usd: float = 0.0
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -76,10 +77,17 @@ class Agent:
         latency = int((time.perf_counter() - start) * 1000)
         result = AgentResult(
             name=self.name, output=output, confidence=round(self._confidence, 3),
-            status=status, latency_ms=latency, mode=self._mode, tool_calls=self._calls,
+            status=status, latency_ms=latency, mode=self._mode,
+            estimated_cost_usd=self._estimate_cost(), tool_calls=self._calls,
         )
         session.record_agent(result)
         return result
+
+    def _estimate_cost(self) -> float:
+        """Rough per-agent cost estimate (LLM calls dominate; tools are near-free)."""
+        n_tools = len(getattr(self, "_calls", []))
+        base = 0.0003 if self._mode == "llm" else 0.00001
+        return round(base + 0.000005 * n_tools, 6)
 
     def _run(self, session: "Session") -> dict[str, Any]:  # pragma: no cover - abstract
         raise NotImplementedError
