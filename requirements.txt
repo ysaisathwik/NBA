@@ -12,6 +12,9 @@ python-dotenv>=1.0
 # Optional: Supabase long-term store (falls back to SQLite without this)
 # supabase>=2.4
 
+# Optional: SendGrid email delivery (falls back to SMTP, then log-only HTML files)
+# sendgrid>=6.11
+
 # Tests
 pytest>=8.0
 httpx>=0.27

@@ -33,6 +33,16 @@ class Settings:
     supabase_key: str = field(default_factory=lambda: os.environ.get("SUPABASE_KEY", "").strip())
     jwt_secret: str = field(default_factory=lambda: os.environ.get("JWT_SECRET", "nba-platform-dev-secret-change-in-prod"))
 
+    # Email delivery (optional — falls back to log-only HTML files in emails/sent_log/).
+    sendgrid_api_key: str = field(default_factory=lambda: os.environ.get("SENDGRID_API_KEY", "").strip())
+    smtp_host: str = field(default_factory=lambda: os.environ.get("SMTP_HOST", "").strip())
+    smtp_port: int = field(default_factory=lambda: int(os.environ.get("SMTP_PORT", "587")))
+    smtp_user: str = field(default_factory=lambda: os.environ.get("SMTP_USER", "").strip())
+    smtp_pass: str = field(default_factory=lambda: os.environ.get("SMTP_PASS", "").strip())
+    email_from: str = field(default_factory=lambda: os.environ.get("EMAIL_FROM", "noreply@nexus-platform.com"))
+    # App base URL — used to build deep-link CTA URLs inside emails.
+    app_base_url: str = field(default_factory=lambda: os.environ.get("APP_BASE_URL", "http://localhost:8000").rstrip("/"))
+
     # Tunables mirrored from the architecture reference.
     similarity_threshold: float = 0.25  # cold-start gate (local hashed embeddings run lower than 0.75)
     episodic_precedent_threshold: float = 0.80

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Northwind Power — Next Best Action</title>
+<title>NexusAgent — Next Best Action</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -150,6 +150,12 @@
   .gate-pending { opacity:.5; }
   .stars { font-size:26px; cursor:pointer; user-select:none; color:var(--gold); letter-spacing:3px; }
   .stars span:hover { opacity:.6; }
+  /* footer */
+  #appfooter { display:none; text-align:center; padding:20px; margin-top:8px; color:var(--muted);
+               font-size:12.5px; border-top:1px solid var(--line); }
+  #appfooter b { color:var(--text); font-family:var(--serif); }
+  .login-foot { text-align:center; padding:14px; color:var(--muted); font-size:12px; }
+  .login-foot b { color:var(--text2); }
 </style>
 </head>
 <body>
@@ -157,38 +163,39 @@
 <!-- ============ LOGIN ============ -->
 <div id="login">
   <div class="login-top">
-    <div class="brandmark"><span class="dot"></span> Northwind Power</div>
-    <p>Next Best Action — agentic decision intelligence. Sign in to your role workspace.</p>
+    <div class="brandmark"><span class="dot"></span> NexusAgent</div>
+    <p>Intelligent Next Best Action — agentic decision intelligence. Sign in to your role workspace.</p>
   </div>
   <div class="login-body">
-    <label>Work email</label><input id="li-email" value="sarah.chen@northwindpower.com" />
+    <label>Work email</label><input id="li-email" value="121103ysaisathwik@gmail.com" />
     <label>Password</label><input id="li-pass" type="password" value="Manager#2024" onkeydown="if(event.key==='Enter')doLogin()" />
     <div id="login-error"></div>
     <button class="primary" style="width:100%;margin-top:16px" onclick="doLogin()">Sign in</button>
     <div class="demo">
       <div class="demo-h">Demo accounts — click to fill</div>
-      <div class="democard" onclick="fill('sarah.chen@northwindpower.com','Manager#2024')">
-        <span class="who2"><b>Sarah Chen</b> · Manager <span class="pill">approves P1/P2</span></span>
+      <div class="democard" onclick="fill('121103ysaisathwik@gmail.com','Manager#2024')">
+        <span class="who2"><b>Sai Sathwik</b> · Manager <span class="pill">approves P1/P2</span></span>
         <span class="cred">Manager#2024</span></div>
-      <div class="democard" onclick="fill('james.okafor@northwindpower.com','Operator#2024')">
-        <span class="who2"><b>James Okafor</b> · Operator <span class="pill">triggers + P3/P4</span></span>
+      <div class="democard" onclick="fill('harshithapembarthi953@gmail.com','Operator#2024')">
+        <span class="who2"><b>Harshitha P.</b> · Operator <span class="pill">triggers + P3/P4</span></span>
         <span class="cred">Operator#2024</span></div>
       <div class="democard" onclick="fill('priya.sharma@northwindpower.com','Engineer#2024')">
         <span class="who2"><b>Priya Sharma</b> · Engineer <span class="pill">field work</span></span>
         <span class="cred">Engineer#2024</span></div>
-      <div class="democard" onclick="fill('alex.rivera@northwindpower.com','Customer#2024')">
-        <span class="who2"><b>Alex Rivera</b> · Customer <span class="pill">complaints</span></span>
+      <div class="democard" onclick="fill('mtejomurtula@gmail.com','Customer#2024')">
+        <span class="who2"><b>Tejo Murtula</b> · Customer <span class="pill">complaints</span></span>
         <span class="cred">Customer#2024</span></div>
       <div class="democard" onclick="fill('morgan.blake@northwindpower.com','Admin#2024')">
         <span class="who2"><b>Morgan Blake</b> · Admin <span class="pill">everything</span></span>
         <span class="cred">Admin#2024</span></div>
     </div>
+    <div class="login-foot">Built by <b>Team HMS</b></div>
   </div>
 </div>
 
 <!-- ============ APP ============ -->
 <header id="header">
-  <div class="brand"><span class="dot"></span> Northwind Power <small>Next Best Action</small></div>
+  <div class="brand"><span class="dot"></span> NexusAgent <small>Intelligent Next Best Action</small></div>
   <div class="hdr-right">
     <div class="metrics" id="metrics"></div>
     <span id="rolebadge" class="rolebadge"></span>
@@ -196,6 +203,7 @@
   </div>
 </header>
 <div id="app"></div>
+<footer id="appfooter">Built by <b>Team HMS</b> · NexusAgent — Intelligent Next Best Action</footer>
 
 <script>
 const ROLE_RANK = {admin:1, manager:2, operator:3, engineer:4, customer:5};
@@ -208,6 +216,10 @@ async function api(path, opts={}) {
   return r;
 }
 async function apiJSON(path, opts={}) { const r = await api(path, opts); return r.json ? r.json() : r; }
+
+// Only touch the DOM when content actually changed — prevents the 1.2s poll from
+// re-rendering identical cards (which replayed entry animations → visible flicker).
+function setHTML(el, html){ if(!el) return; if(el.__h===html) return; el.__h=html; el.innerHTML=html; }
 
 function fill(e,p){ document.getElementById('li-email').value=e; document.getElementById('li-pass').value=p; }
 
@@ -232,6 +244,7 @@ async function boot() {
   document.getElementById('login').style.display='none';
   document.getElementById('header').style.display='flex';
   document.getElementById('app').style.display='block';
+  document.getElementById('appfooter').style.display='block';
   const rb = document.getElementById('rolebadge');
   rb.className = 'rolebadge r-'+me.role; rb.textContent = me.role.toUpperCase()+' · '+me.name;
   if (['manager','operator','admin'].includes(me.role)) refreshMetrics(); else document.getElementById('metrics').innerHTML='';
@@ -243,9 +256,9 @@ function show(id){ ['login'].forEach(x=>document.getElementById(x).style.display
 
 async function refreshMetrics() {
   const m = await apiJSON('/api/metrics'); if (!m || !m.llm_mode) return;
-  document.getElementById('metrics').innerHTML =
+  setHTML(document.getElementById('metrics'),
     `store <b>${m.store_backend}</b> · LLM <b>${m.llm_mode}</b> · cases <b>${m.sessions}</b> · `+
-    `auto-approve <b>${m.auto_approve_rate_pct}%</b> · patterns <b>${m.learning_patterns}</b>`;
+    `auto-approve <b>${m.auto_approve_rate_pct}%</b> · patterns <b>${m.learning_patterns}</b>`);
 }
 
 // ---------- dashboards ----------
@@ -334,29 +347,29 @@ function fmtState(s){ const c={RESOLVED:'b-green',CLOSED:'b-green',ESCALATED:'b-
 function renderKpis(s){ const el=document.getElementById('kpis'); if(!el)return;
   const total=s.length, resolved=s.filter(x=>['CLOSED','RESOLVED'].includes(x.state)).length;
   const pending=s.filter(x=>x.awaiting_human).length;
-  el.innerHTML = [['Total cases',total],['Resolved',resolved],['Pending HITL',pending],
-    ['In progress',total-resolved],['Roles','5']].map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  setHTML(el, [['Total cases',total],['Resolved',resolved],['Pending HITL',pending],
+    ['In progress',total-resolved],['Roles','5']].map(([l,v])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join(''));
 }
 function renderCases(s){ const el=document.getElementById('cases'); if(!el)return;
-  if(!s.length){el.innerHTML='<div class="empty">No cases yet.</div>';return;}
-  el.innerHTML = `<table><tr><th>Type</th><th>Sev</th><th>State</th><th>Asset</th><th></th></tr>`+
+  if(!s.length){setHTML(el,'<div class="empty">No cases yet.</div>');return;}
+  setHTML(el, `<table><tr><th>Type</th><th>Sev</th><th>State</th><th>Asset</th><th></th></tr>`+
     s.map(x=>`<tr><td>${x.event_type||(x.event&&x.event.type)||'-'}</td><td>${x.severity||(x.event&&x.event.severity)||'-'}</td>
       <td>${fmtState(x.state)}</td><td>${x.asset_id||(x.event&&x.event.asset_id)||'-'}</td>
-      <td><button onclick="openCase('${x.session_id}')">View</button></td></tr>`).join('')+`</table>`;
+      <td><button onclick="openCase('${x.session_id}')">View</button></td></tr>`).join('')+`</table>`);
 }
 function renderQueue(s){ const el=document.getElementById('queue'); if(!el)return;
   const q=s.filter(x=>x.awaiting_human);
-  if(!q.length){el.innerHTML='<div class="empty">Nothing awaiting approval.</div>';return;}
-  el.innerHTML = q.map(x=>{
+  if(!q.length){setHTML(el,'<div class="empty">Nothing awaiting approval.</div>');return;}
+  setHTML(el, q.map(x=>{
     const req=x.required_role||'operator'; const canAct=ROLE_RANK[ME.role]<=ROLE_RANK[req];
     return `<div class="rec" onclick="openCase('${x.session_id}')"><h3><span>${x.event_type||(x.event&&x.event.type)}</span>${fmtState(x.state)}</h3>
       <div class="desc">urgency ${x.urgency||'?'} · needs <b>${req}</b> approval</div>
       <button class="${canAct?'primary':''}" onclick="openCase('${x.session_id}')">${canAct?'Review & approve':'View (no authority)'}</button></div>`;
-  }).join('');
+  }).join(''));
 }
 function renderAnalytics(s){ const el=document.getElementById('analytics'); if(!el)return;
-  el.innerHTML = `<table><tr><th>ID</th><th>State</th><th>Urgency</th></tr>`+
-    s.map(x=>`<tr><td><code>${x.session_id.slice(-6)}</code></td><td>${fmtState(x.state)}</td><td>${x.urgency||'-'}</td></tr>`).join('')+`</table>`;
+  setHTML(el, `<table><tr><th>ID</th><th>State</th><th>Urgency</th></tr>`+
+    s.map(x=>`<tr><td><code>${x.session_id.slice(-6)}</code></td><td>${fmtState(x.state)}</td><td>${x.urgency||'-'}</td></tr>`).join('')+`</table>`);
 }
 const SEV_RANK={CRITICAL:0,MAJOR:1,WARNING:2,INFO:3};
 async function renderWorkOrders(s){ const el=document.getElementById('workorders'); if(!el)return;
@@ -369,18 +382,18 @@ async function renderWorkOrders(s){ const el=document.getElementById('workorders
       needsUpdate:snap.awaiting_work_update, blocked:(snap.work_update||{}).status==='blocked'});
   }
   rows.sort((a,b)=> (b.blocked-a.blocked) || (SEV_RANK[a.severity]-SEV_RANK[b.severity]) || (b.needsUpdate-a.needsUpdate));
-  el.innerHTML = rows.length ? `<table><tr><th>Work order</th><th>Asset</th><th>State</th><th></th></tr>`+
+  setHTML(el, rows.length ? `<table><tr><th>Work order</th><th>Asset</th><th>State</th><th></th></tr>`+
     rows.map(r=>`<tr><td><code>${r.wo}</code>${SEV_RANK[r.severity]<=1?' <span class="badge b-red">URGENT</span>':''}
       ${r.blocked?'<span class="badge b-red">BLOCKED</span>':''}${r.needsUpdate?'<span class="badge b-amber">NEEDS UPDATE</span>':''}</td>
       <td>${r.asset||'-'}</td><td>${fmtState(r.state)}</td>
       <td><button class="${r.needsUpdate?'primary':''}" onclick="openCase('${r.sid}')">Open</button></td></tr>`).join('')+`</table>`
-    : '<div class="empty">No work orders assigned.</div>';
+    : '<div class="empty">No work orders assigned.</div>');
 }
 function renderAssets(){ const el=document.getElementById('assets'); if(!el)return;
-  el.innerHTML = `<table><tr><th>Asset</th><th>Type</th><th>Health</th></tr>
+  setHTML(el, `<table><tr><th>Asset</th><th>Type</th><th>Health</th></tr>
     <tr><td>TR-441</td><td>transformer</td><td><span class="badge b-amber">0.62</span></td></tr>
     <tr><td>TR-442</td><td>transformer</td><td><span class="badge b-green">0.88</span></td></tr></table>
-    <div class="empty" style="text-align:left">Health scores from the long-term store; live values appear in each case's context.</div>`;
+    <div class="empty" style="text-align:left">Health scores from the long-term store; live values appear in each case's context.</div>`);
 }
 
 // ---------- dialogue ----------
@@ -406,7 +419,7 @@ function copySid(){ navigator.clipboard.writeText(CURSID); }
 async function renderDetail() {
   const el=document.getElementById('detail'); if(!el||!CURSID)return;
   const snap = await apiJSON('/api/sessions/'+CURSID);
-  if (!snap || !snap.state) { el.innerHTML='<div class="empty">Loading…</div>'; return; }
+  if (!snap || !snap.state) { setHTML(el,'<div class="empty">Loading…</div>'); return; }
 
   let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <div>${fmtState(snap.state)} <span style="color:var(--muted);font-size:12px">${(snap.event&&snap.event.type)||''}</span>
@@ -447,7 +460,7 @@ async function renderDetail() {
   }
 
   html += renderReco(snap);
-  el.innerHTML = html;
+  setHTML(el, html);
 }
 
 function riskBar(risk){ if(!risk)return'';

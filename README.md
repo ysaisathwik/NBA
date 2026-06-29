@@ -1,4 +1,6 @@
-# Northwind Power — Intelligent Next Best Action (NBA) Platform
+# NexusAgent — Intelligent Next Best Action Platform
+
+*Built by **Team HMS**.*
 
 An **Agentic Decision Intelligence Platform** that turns customer interactions and
 enterprise knowledge into explainable, human-reviewed **next best actions**.
@@ -20,6 +22,12 @@ A case only closes after passing **three human checkpoints**:
 The web UI is a warm, cream-themed role workspace (Fraunces + Inter typography) with a live
 `Gate 1 → Gate 2 → Gate 3` status bar, animated agent trace, risk heat-bars, and a
 customer-facing progress timeline.
+
+Each gate also fires a **rich HTML email** (cream/navy transactional design) to the right
+person with a deep-link CTA back to the correct dashboard — case-opened, approval-required,
+task-assigned, engineer-dispatched, and work-done-please-confirm. With no mail provider
+configured, emails are rendered to `nba_platform/emails/sent_log/*.html` for local preview,
+and live samples are available at `GET /api/emails/preview/{type}`.
 
 ---
 
@@ -90,10 +98,10 @@ The UI opens on a **login screen**. Pick a demo account to see its dashboard:
 
 | Name | Email | Password | Role | Dashboard |
 |---|---|---|---|---|
-| Sarah Chen | sarah.chen@northwindpower.com | `Manager#2024` | manager | KPIs, all cases, **approval queue (P1/P2)**, analytics |
-| James Okafor | james.okafor@northwindpower.com | `Operator#2024` | operator | dialogue box, my cases, **HITL queue (P3/P4)** |
+| Sai Sathwik | 121103ysaisathwik@gmail.com | `Manager#2024` | manager | KPIs, all cases, **approval queue (P1/P2)**, analytics |
+| Harshitha P. | harshithapembarthi953@gmail.com | `Operator#2024` | operator | dialogue box, my cases, **HITL queue (P3/P4)** |
 | Priya Sharma | priya.sharma@northwindpower.com | `Engineer#2024` | engineer | assigned work orders, asset health (read-only) |
-| Alex Rivera | alex.rivera@northwindpower.com | `Customer#2024` | customer | my service cases + status tracker, file a complaint |
+| Tejo Murtula | mtejomurtula@gmail.com | `Customer#2024` | customer | my service cases + status tracker, file a complaint |
 | Morgan Blake | morgan.blake@northwindpower.com | `Admin#2024` | admin | everything + audit |
 
 **Guardrails:** nonsense / "No problem" / out-of-domain input is rejected (422) with a helpful
@@ -138,10 +146,10 @@ Open http://localhost:8000
 Demo credentials:
 | Role | Email | Password |
 |---|---|---|
-| Manager | sarah.chen@northwindpower.com | `Manager#2024` |
-| Operator | james.okafor@northwindpower.com | `Operator#2024` |
+| Manager | 121103ysaisathwik@gmail.com | `Manager#2024` |
+| Operator | harshithapembarthi953@gmail.com | `Operator#2024` |
 | Engineer | priya.sharma@northwindpower.com | `Engineer#2024` |
-| Customer | alex.rivera@northwindpower.com | `Customer#2024` |
+| Customer | mtejomurtula@gmail.com | `Customer#2024` |
 | Admin | morgan.blake@northwindpower.com | `Admin#2024` |
 
 ### Offline demo (no API key)
@@ -172,6 +180,40 @@ Every case passes **three human checkpoints** — agents are analysts, humans de
    question + star rating). Only then does the case close and the learning cycle run.
 
 The UI shows this as a live `Gate 1 → Gate 2 → Gate 3` status bar.
+
+---
+
+## Rich HTML email notifications
+
+Each gate automatically emails the right person a cream/navy transactional HTML email with a
+deep-link CTA button back to the correct dashboard:
+
+| Email | Recipient | When |
+|---|---|---|
+| Case opened | customer | on submission |
+| Approval required | manager / operator | Gate 1 (authorisation needed) |
+| Task assigned | engineer or operator | Gate 2 (work to do) |
+| Engineer dispatched | customer | after execution (field work) |
+| Work done — please confirm | customer | Gate 2 complete → awaiting Gate 3 |
+
+Delivery order: **SendGrid → SMTP → log-only**. With no provider configured, every email is
+rendered to `nba_platform/emails/sent_log/*.html` (open in a browser to preview). Configure a
+provider in `.env`:
+
+```bash
+SENDGRID_API_KEY=          # option A
+SMTP_HOST= / SMTP_PORT= / SMTP_USER= / SMTP_PASS=   # option B
+EMAIL_FROM=noreply@nexus-platform.com
+APP_BASE_URL=http://localhost:8000   # used to build the deep-link CTAs
+```
+
+Preview any template in the browser (no auth):
+`GET /api/emails/preview/{case_opened|engineer_assigned|work_done|approval_required|task_engineer|task_operator}`.
+SendGrid is optional (`pip install sendgrid`); the import is guarded.
+
+Code: [`nba_platform/emails/templates.py`](nba_platform/emails/templates.py) (HTML builders),
+[`nba_platform/emails/sender.py`](nba_platform/emails/sender.py) (delivery),
+[`nba_platform/agents/notification.py`](nba_platform/agents/notification.py) (dispatch).
 
 ---
 

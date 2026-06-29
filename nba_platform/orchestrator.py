@@ -140,6 +140,8 @@ class Orchestrator:
         review = session.mem.get_blob("human_review", {}) or {}
         if review.get("decision") == "pending":
             package = session.mem.get_blob("review_package", {})
+            # Email 4: notify the manager/operator who must authorise (Gate 1).
+            self.platform.agent("notification").send_approval_required(session)
             decision = self.decision_provider(session, package)
             session.mem.set_blob("human_review", decision)
             review = decision
@@ -163,6 +165,8 @@ class Orchestrator:
         # 7) Execution
         session.set_state(CaseState.EXECUTING)
         self.platform.agent("execution").run(session)
+        # Email 2: customer — engineer dispatched (field work only; method self-guards).
+        self.platform.agent("notification").send_engineer_assigned(session)
 
         # 8) Verify → replan goal loop
         self._goal_loop(session)
@@ -195,6 +199,8 @@ class Orchestrator:
                     "work_order_id": exec_result.get("work_order_id"), "is_field": worker_role == "engineer"})
                 session.set_state(CaseState.EXECUTING)
                 session.log(f"Gate 2: awaiting {worker_role} confirmation", detail=task_label)
+                # Email 5: notify the assigned engineer/operator of the task.
+                self.platform.agent("notification").send_task_assigned(session)
                 update = self.work_update_provider(session) if self.work_update_provider else {"status": "timeout"}
                 session.log("Gate 2: worker update received",
                             detail=f"status={update.get('status')} {update.get('notes', '')}", data=update)
@@ -212,6 +218,8 @@ class Orchestrator:
                 session.mem.set_state("work_confirmed", update.get("status") in {"completed", "done", "processed", "timeout"})
                 session.mem.set_state("work_confirmed_by", update.get("engineer_name", ""))
                 session.mem.set_state("work_notes_for_customer", update.get("notes") or "Work completed by our team.")
+                # Email 3: customer — work done, please confirm resolution.
+                self.platform.agent("notification").send_work_done_customer(session)
                 session.set_state(CaseState.VERIFYING)
                 session.advance_clock(wait)
                 verify = self.platform.agent("verification").run(session).output

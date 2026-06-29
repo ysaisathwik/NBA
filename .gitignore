@@ -7,3 +7,6 @@ venv/
 *.db
 .pytest_cache/
 .DS_Store
+
+# Locally-rendered email previews (keep the dir via .gitkeep)
+nba_platform/emails/sent_log/*.html

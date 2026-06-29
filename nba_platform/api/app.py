@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from ..auth import (HITL_APPROVAL_MATRIX, ROLE_RANK, get_permissions, login,
@@ -195,6 +195,42 @@ def index() -> FileResponse:
     return FileResponse(_STATIC / "index.html")
 
 
+@app.get("/dashboard")
+def dashboard() -> FileResponse:
+    # Email CTA buttons deep-link here (with ?role/&tab/&sid query params); serve the SPA.
+    return FileResponse(_STATIC / "index.html")
+
+
+@app.get("/api/emails/preview/{email_type}")
+def preview_email(email_type: str) -> HTMLResponse:
+    """Render a sample email for browser preview (demo/dev use only)."""
+    from ..emails.templates import (email_approval_required_manager, email_case_opened,
+                                    email_engineer_assigned, email_task_assigned_engineer,
+                                    email_task_assigned_operator, email_work_done_customer)
+    base = platform.settings.app_base_url
+    samples = {
+        "case_opened": lambda: email_case_opened(
+            "Alex Rivera", "sess-demo-001", "billing_dispute", "P4", base, "mtejomurtula@gmail.com"),
+        "engineer_assigned": lambda: email_engineer_assigned(
+            "Alex Rivera", "sess-demo-001", "TR-441", "WO-2025-001", 45, base),
+        "work_done": lambda: email_work_done_customer(
+            "Alex Rivera", "sess-demo-001", "TR-441",
+            "emergency_fan_replacement", "Replaced cooling fan unit 3B. System nominal.", "WO-2025-001", base),
+        "approval_required": lambda: email_approval_required_manager(
+            "Sarah Chen", "sess-demo-001", "emergency_fan_replacement", "TR-441", "P1", 0.91, "HIGH", base),
+        "task_engineer": lambda: email_task_assigned_engineer(
+            "Priya Sharma", "sess-demo-001", "WO-2025-001", "TR-441",
+            "emergency_fan_replacement", "Replace failed cooling fan unit on TR-441.", "P1", base),
+        "task_operator": lambda: email_task_assigned_operator(
+            "James Okafor", "sess-demo-001", "WO-2025-002",
+            "billing_adjustment", "Review meter data and confirm billing adjustment issued.", "P4", base),
+    }
+    if email_type not in samples:
+        return HTMLResponse(f"<h2>Unknown type. Valid: {list(samples)}</h2>", status_code=404)
+    _, html = samples[email_type]()
+    return HTMLResponse(content=html)
+
+
 @app.get("/api/scenarios")
 def scenarios() -> list[dict[str, Any]]:
     return [
@@ -234,6 +270,12 @@ def create_event(payload: EventIn,
     session.mem.set_state("triggered_by", user["id"])
     session.mem.set_state("originated_by", user["role"])
     _start(session)
+    # Email 1: customer — case opened acknowledgement (only if a customer is attached).
+    if session.event.customer_id:
+        try:
+            platform.agent("notification").send_case_opened(session)
+        except Exception:
+            pass
     return {"session_id": session.sid}
 
 
@@ -269,6 +311,11 @@ def submit_dialogue(payload: DialogueIn, user: dict = Depends(require_auth)) -> 
                 detail=f"event={event.type} · severity={event.severity} · matched={parsed['matched_agents']}",
                 data=parsed)
     _start(session)
+    # Email 1: customer — case opened acknowledgement (non-blocking).
+    try:
+        platform.agent("notification").send_case_opened(session)
+    except Exception:
+        pass
     return {"session_id": session.sid, "extracted_event": parsed,
             "matched_agents": parsed["matched_agents"]}
 
